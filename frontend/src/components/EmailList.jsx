@@ -69,119 +69,147 @@ export default function EmailList({ emails, currentView, setEmails }) {
   };
 
   return (
-    <div className="flex-1 bg-white">
+    <div className="modern-email-list">
       {/* Tabs */}
-      <div className="border-b border-gray-200">
-        <div className="flex">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
-                tab.active
-                  ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-600 hover:text-gray-900"
-              }`}
-            >
-              {tab.label}
+      <div className="modern-tabs">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            className={`modern-tab ${tab.active ? 'active' : ''}`}
+          >
+            <div className="flex items-center gap-2">
+              <span>{tab.label}</span>
               {tab.count && (
-                <span className="ml-2 bg-blue-100 text-blue-600 px-2 py-1 rounded-full text-xs">
+                <span className="modern-badge secondary">
                   {tab.count}
                 </span>
               )}
-            </button>
-          ))}
-        </div>
+            </div>
+          </button>
+        ))}
       </div>
 
       {/* Email List Header */}
-      <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+      <div className="modern-toolbar">
         <div className="flex items-center gap-4">
           <input
             type="checkbox"
             checked={selectAll}
             onChange={handleSelectAll}
-            className="w-4 h-4 text-blue-600 rounded"
+            className="w-4 h-4 text-blue-600 rounded modern-focus"
           />
-          <button className="text-gray-600 hover:text-gray-900">
-            <span>↻</span>
+          <button className="modern-toolbar-button" title="Refresh">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
           </button>
-          <button className="text-gray-600 hover:text-gray-900">
-            <span>📁</span>
+          <button className="modern-toolbar-button" title="Archive">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8l4 4-4 4m5-4h6" />
+            </svg>
           </button>
-          <button className="text-gray-600 hover:text-gray-900">
-            <span>🗑️</span>
+          <button className="modern-toolbar-button" title="Delete">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
           </button>
         </div>
         
-        <div className="text-sm text-gray-500">
-          {currentView === "sent" ? `${emails.length} sent emails` : "1-50 of 2,004"}
+        <div className="flex items-center gap-4">
+          <div className="text-sm text-gray-500">
+            {currentView === "sent" ? `${emails.length} sent emails` : "1-50 of 2,004"}
+          </div>
+          <button className="modern-toolbar-button" title="More options">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+            </svg>
+          </button>
         </div>
       </div>
 
       {/* Email List */}
-      <div className="divide-y divide-gray-200">
+      <div className="space-y-1 p-4">
         {emails.map((email) => (
-            <div
-              key={email.id}
-              className={`px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors ${
-                !email.isRead ? "bg-blue-50" : ""
-              }`}
-              onClick={() => {
-                handleMarkAsRead(email.id);
-                handleViewEmail(email);
-              }}
-            >
-            <div className="flex items-center gap-3">
+          <div
+            key={email.id}
+            className={`modern-email-item ${!email.isRead ? "unread" : ""} modern-card`}
+            onClick={() => {
+              handleMarkAsRead(email.id);
+              handleViewEmail(email);
+            }}
+          >
+            <div className="flex items-center gap-4">
               <input
                 type="checkbox"
                 checked={selectedEmails.includes(email.id)}
                 onChange={() => handleSelectEmail(email.id)}
-                className="w-4 h-4 text-blue-600 rounded"
+                className="w-4 h-4 text-blue-600 rounded modern-focus"
                 onClick={(e) => e.stopPropagation()}
               />
               
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleStarEmail(email.id);
-                }}
-                className={`text-lg ${
-                  email.isStarred ? "text-yellow-500" : "text-gray-300 hover:text-yellow-500"
-                }`}
-              >
-                {email.isStarred ? "⭐" : "☆"}
-              </button>
+              <div className="modern-avatar">
+                <span className="font-bold">{email.avatar || email.from.charAt(0)}</span>
+              </div>
 
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className={`font-medium ${!email.isRead ? "font-bold" : ""}`}>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={`font-semibold text-sm ${!email.isRead ? "text-gray-900" : "text-gray-700"}`}>
                     {currentView === "sent" ? email.to : email.from}
                   </span>
                   {!email.isRead && currentView !== "sent" && (
-                    <span className="bg-blue-100 text-blue-600 px-2 py-1 rounded-full text-xs font-medium">
-                      New
+                    <span className="modern-badge success">New</span>
+                  )}
+                  {email.priority && email.priority !== 'normal' && (
+                    <span className={`text-xs px-2 py-1 rounded-full ${
+                      email.priority === 'high' ? 'bg-red-100 text-red-800' :
+                      email.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-green-100 text-green-800'
+                    }`}>
+                      {email.priority}
                     </span>
                   )}
                 </div>
                 <div className="text-sm text-gray-600 truncate">
-                  <span className={!email.isRead ? "font-semibold" : ""}>
+                  <span className={!email.isRead ? "font-semibold text-gray-900" : ""}>
                     {email.subject}
                   </span>
-                  <span className="text-gray-400 ml-2">- {email.preview}</span>
+                </div>
+                <div className="text-xs text-gray-500 truncate mt-1">
+                  {email.preview}
                 </div>
               </div>
 
-              <div className="text-sm text-gray-500">
-                {email.time}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleStarEmail(email.id);
+                  }}
+                  className={`p-1 rounded transition-colors ${
+                    email.isStarred 
+                      ? "text-yellow-500 hover:text-yellow-600" 
+                      : "text-gray-300 hover:text-yellow-500"
+                  }`}
+                >
+                  <svg className="w-4 h-4" fill={email.isStarred ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                  </svg>
+                </button>
+                
+                <div className="text-xs text-gray-500">
+                  {email.time}
+                </div>
               </div>
             </div>
             
             {/* Show attachments if any */}
             {email.attachments && email.attachments.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-2">
+              <div className="mt-3 flex flex-wrap gap-2">
                 {email.attachments.map((attachment, index) => (
-                  <div key={index} className="flex items-center gap-1 bg-gray-100 rounded px-2 py-1 text-xs">
-                    <span>📎</span>
+                  <div key={index} className="flex items-center gap-1 bg-gray-100 rounded-lg px-2 py-1 text-xs">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                    </svg>
                     <span className="truncate max-w-20">{attachment.name}</span>
                     <span className="text-gray-500">({formatFileSize(attachment.size)})</span>
                   </div>
@@ -193,13 +221,17 @@ export default function EmailList({ emails, currentView, setEmails }) {
       </div>
 
       {/* Pagination */}
-      <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
+      <div className="modern-toolbar">
         <div className="flex items-center gap-2">
-          <button className="p-2 hover:bg-gray-100 rounded">
-            <span>◀</span>
+          <button className="modern-toolbar-button" title="Previous">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
           </button>
-          <button className="p-2 hover:bg-gray-100 rounded">
-            <span>▶</span>
+          <button className="modern-toolbar-button" title="Next">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
           </button>
         </div>
         
@@ -210,8 +242,8 @@ export default function EmailList({ emails, currentView, setEmails }) {
 
       {/* Email Detail Modal */}
       {selectedEmail && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
+        <div className="modern-modal-overlay fade-in">
+          <div className="modern-modal slide-in">
             {/* Header */}
             <div className="bg-gray-100 px-6 py-4 border-b border-gray-200 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-800">
@@ -265,10 +297,7 @@ export default function EmailList({ emails, currentView, setEmails }) {
                         </div>
                         <button
                           onClick={() => handleDownloadAttachment(attachment)}
-                          className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium transition-colors"
-                          style={{ backgroundColor: '#ffda03' }}
-                          onMouseEnter={(e) => e.target.style.backgroundColor = '#e6c400'}
-                          onMouseLeave={(e) => e.target.style.backgroundColor = '#ffda03'}
+                          className="btn-primary"
                         >
                           Download
                         </button>

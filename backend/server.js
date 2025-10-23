@@ -35,7 +35,7 @@ app.post("/api/send-email", upload.array('attachments'), async (req, res) => {
   console.log("📧 Email request received:", req.body);
   console.log("📎 Files received:", req.files);
   
-  const { to, subject, message } = req.body;
+  const { to, cc, bcc, subject, message, messageHtml } = req.body;
 
   // Validate required fields
   if (!to || !subject || !message) {
@@ -77,8 +77,17 @@ app.post("/api/send-email", upload.array('attachments'), async (req, res) => {
       from: process.env.EMAIL_USER,
       to,
       subject,
-      text: message,
+      text: message, // Plain text version
+      html: messageHtml || message, // HTML version if available
     };
+
+    // Add CC and BCC if provided
+    if (cc) {
+      mailOptions.cc = cc;
+    }
+    if (bcc) {
+      mailOptions.bcc = bcc;
+    }
 
     // Add attachments if any
     if (req.files && req.files.length > 0) {

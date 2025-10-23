@@ -7,7 +7,14 @@ import EmailList from "./components/EmailList";
 function App() {
   const [currentView, setCurrentView] = useState("inbox");
   const [showCompose, setShowCompose] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sentEmails, setSentEmails] = useState([]);
+  const [clients, setClients] = useState([
+    { id: 1, name: "John Smith", email: "john.smith@example.com", company: "Tech Corp" },
+    { id: 2, name: "Sarah Johnson", email: "sarah.j@company.com", company: "Design Studio" },
+    { id: 3, name: "Mike Wilson", email: "mike.wilson@business.com", company: "Business Inc" }
+  ]);
+  const [selectedClient, setSelectedClient] = useState(null);
   const [emails, setEmails] = useState([
     {
       id: 1,
@@ -17,6 +24,8 @@ function App() {
       time: "4:20 PM",
       isRead: false,
       isStarred: false,
+      avatar: "G",
+      priority: "high"
     },
     {
       id: 2,
@@ -26,6 +35,8 @@ function App() {
       time: "3:45 PM",
       isRead: false,
       isStarred: true,
+      avatar: "L",
+      priority: "medium"
     },
     {
       id: 3,
@@ -35,6 +46,8 @@ function App() {
       time: "2:30 PM",
       isRead: true,
       isStarred: false,
+      avatar: "S",
+      priority: "low"
     },
     {
       id: 4,
@@ -44,6 +57,8 @@ function App() {
       time: "1:15 PM",
       isRead: true,
       isStarred: false,
+      avatar: "N",
+      priority: "low"
     },
     {
       id: 5,
@@ -53,6 +68,8 @@ function App() {
       time: "12:00 PM",
       isRead: false,
       isStarred: false,
+      avatar: "H",
+      priority: "medium"
     },
   ]);
 
@@ -69,6 +86,19 @@ function App() {
     setSentEmails(prev => [sentEmail, ...prev]);
   };
 
+  const handleClientSelect = (client) => {
+    setSelectedClient(client);
+    setShowCompose(true);
+  };
+
+  const handleAddClient = (newClient) => {
+    const client = {
+      id: Date.now(),
+      ...newClient
+    };
+    setClients(prev => [...prev, client]);
+  };
+
   const getCurrentEmails = () => {
     if (currentView === "sent") {
       return sentEmails.map(email => ({
@@ -82,24 +112,34 @@ function App() {
         isStarred: false,
         attachments: email.attachments || [],
         fullMessage: email.message,
+        avatar: "M",
+        priority: "normal"
       }));
     }
     return emails;
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen gradient-bg">
       {/* Sidebar */}
       <Sidebar 
         currentView={currentView} 
         setCurrentView={setCurrentView}
         onComposeClick={() => setShowCompose(true)}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        clients={clients}
+        onClientSelect={handleClientSelect}
+        onAddClient={handleAddClient}
       />
       
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
         {/* Header */}
-        <Header />
+        <Header 
+          onMenuClick={() => setSidebarOpen(!sidebarOpen)}
+          sidebarOpen={sidebarOpen}
+        />
         
         {/* Email List */}
         <EmailList 
@@ -110,7 +150,22 @@ function App() {
       </div>
       
       {/* Compose Modal */}
-      {showCompose && <ComposeModal onClose={() => setShowCompose(false)} onEmailSent={handleEmailSent} />}
+      {showCompose && (
+        <ComposeModal 
+          onClose={() => setShowCompose(false)} 
+          onEmailSent={handleEmailSent}
+          selectedClient={selectedClient}
+          onClientCleared={() => setSelectedClient(null)}
+        />
+      )}
+      
+      {/* Mobile Overlay */}
+      {sidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-30 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
     </div>
   );
 }
