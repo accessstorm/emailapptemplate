@@ -2,11 +2,25 @@ import express from "express";
 import cors from "cors";
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
+import multer from "multer";
+import path from "path";
 
 dotenv.config();
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/');
+  },
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + '-' + file.originalname);
+  }
+});
+
+const upload = multer({ storage: storage });
 
 // Health check endpoint
 app.get("/api/health", (req, res) => {
@@ -17,8 +31,9 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-app.post("/api/send-email", async (req, res) => {
+app.post("/api/send-email", upload.array('attachments'), async (req, res) => {
   console.log("📧 Email request received:", req.body);
+  console.log("📎 Files received:", req.files);
   
   const { to, subject, message } = req.body;
 
@@ -56,12 +71,25 @@ app.post("/api/send-email", async (req, res) => {
     console.log("✅ Transporter verified successfully");
 
     console.log("📤 Sending email to:", to);
-    const result = await transporter.sendMail({
+    
+    // Prepare email options
+    const mailOptions = {
       from: process.env.EMAIL_USER,
       to,
       subject,
       text: message,
-    });
+    };
+
+    // Add attachments if any
+    if (req.files && req.files.length > 0) {
+      console.log("📎 Adding attachments:", req.files.map(f => f.originalname));
+      mailOptions.attachments = req.files.map(file => ({
+        filename: file.originalname,
+        path: file.path
+      }));
+    }
+
+    const result = await transporter.sendMail(mailOptions);
 
     console.log("✅ Email sent successfully:", result.messageId);
     res.json({ success: true, message: "Email sent successfully!" });
