@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 
-export default function ComposeModal({ onClose, onEmailSent, selectedClient, onClientCleared }) {
+export default function ComposeModal({ onClose, onEmailSent, selectedClient, onClientCleared, currentDraft, onDraftCleared, onSaveDraft, onUpdateDraft }) {
   const [formData, setFormData] = useState({
     to: "",
     cc: "",
@@ -23,8 +23,14 @@ export default function ComposeModal({ onClose, onEmailSent, selectedClient, onC
   const [isItalic, setIsItalic] = useState(false);
   const [isUnderline, setIsUnderline] = useState(false);
   const [textAlign, setTextAlign] = useState("left");
+  const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef(null);
   const messageRef = useRef(null);
+  
+  // Callback ref to handle contentEditable initialization
+  const setMessageRef = (node) => {
+    messageRef.current = node;
+  };
 
   // Auto-fill email when client is selected
   useEffect(() => {
@@ -35,6 +41,109 @@ export default function ComposeModal({ onClose, onEmailSent, selectedClient, onC
       }));
     }
   }, [selectedClient]);
+
+  // Load draft data when currentDraft changes
+  useEffect(() => {
+    if (currentDraft) {
+      console.log('Loading draft:', currentDraft);
+      setFormData({
+        to: currentDraft.to || "",
+        cc: currentDraft.cc || "",
+        bcc: currentDraft.bcc || "",
+        subject: currentDraft.subject || "",
+        message: currentDraft.message || "",
+        messageHtml: currentDraft.messageHtml || ""
+      });
+      setAttachments(currentDraft.attachments || []);
+    } else {
+      // Clear form when starting fresh
+      setFormData({
+        to: "",
+        cc: "",
+        bcc: "",
+        subject: "",
+        message: "",
+        messageHtml: ""
+      });
+      setAttachments([]);
+    }
+  }, [currentDraft]);
+
+  // Restore contentEditable content when currentDraft changes
+  useEffect(() => {
+    if (messageRef.current) {
+      if (currentDraft && currentDraft.messageHtml) {
+        // Only restore if the content is different to avoid overwriting user input
+        if (messageRef.current.innerHTML !== currentDraft.messageHtml) {
+          console.log('Restoring contentEditable with:', currentDraft.messageHtml);
+          messageRef.current.innerHTML = currentDraft.messageHtml;
+        }
+      } else if (!currentDraft) {
+        // Only clear if we're not loading a draft
+        console.log('Clearing contentEditable');
+        messageRef.current.innerHTML = "";
+      }
+    }
+  }, [currentDraft]);
+
+  // Ensure contentEditable is properly editable after content restoration
+  useEffect(() => {
+    if (messageRef.current && currentDraft && currentDraft.messageHtml) {
+      // Small delay to ensure the content is set before making it editable
+      setTimeout(() => {
+        if (messageRef.current) {
+          messageRef.current.focus();
+          // Ensure the contentEditable attribute is still set
+          messageRef.current.setAttribute('contenteditable', 'true');
+        }
+      }, 100);
+    }
+  }, [currentDraft]);
+
+  // Auto-save functionality
+  useEffect(() => {
+    const autoSaveInterval = setInterval(async () => {
+      if (formData.to || formData.subject || formData.message) {
+        try {
+          if (currentDraft) {
+            // Update existing draft
+            await onUpdateDraft(currentDraft._id, formData);
+          } else {
+            // Create new draft
+            await onSaveDraft(formData);
+          }
+        } catch (error) {
+          console.error('Auto-save failed:', error);
+        }
+      }
+    }, 10000); // Auto-save every 10 seconds for better user experience
+
+    return () => clearInterval(autoSaveInterval);
+  }, [formData, currentDraft, onSaveDraft, onUpdateDraft]);
+
+  // Debounced auto-save on typing
+  useEffect(() => {
+    const timeoutId = setTimeout(async () => {
+      if (formData.to || formData.subject || formData.message) {
+        try {
+          setIsSaving(true);
+          if (currentDraft) {
+            // Update existing draft
+            await onUpdateDraft(currentDraft._id, formData);
+          } else {
+            // Create new draft
+            await onSaveDraft(formData);
+          }
+          setIsSaving(false);
+        } catch (error) {
+          console.error('Auto-save failed:', error);
+          setIsSaving(false);
+        }
+      }
+    }, 2000); // Auto-save 2 seconds after user stops typing
+
+    return () => clearTimeout(timeoutId);
+  }, [formData, currentDraft, onSaveDraft, onUpdateDraft]);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -180,6 +289,11 @@ export default function ComposeModal({ onClose, onEmailSent, selectedClient, onC
       formDataToSend.append('message', formData.message);
       formDataToSend.append('messageHtml', formData.messageHtml);
       
+      // Add draftId if this is being sent from a draft
+      if (currentDraft && currentDraft._id) {
+        formDataToSend.append('draftId', currentDraft._id);
+      }
+      
       // Add attachments
       attachments.forEach(attachment => {
         formDataToSend.append('attachments', attachment.file);
@@ -212,24 +326,49 @@ export default function ComposeModal({ onClose, onEmailSent, selectedClient, onC
     }
   };
 
+  const handleClose = async () => {
+    // Save as draft before closing if there's content
+    if (formData.to || formData.subject || formData.message) {
+      try {
+        if (currentDraft) {
+          // Update existing draft
+          await onUpdateDraft(currentDraft._id, formData);
+        } else {
+          // Create new draft
+          await onSaveDraft(formData);
+        }
+        setStatus("Draft saved");
+      } catch (error) {
+        console.error('Error saving draft on close:', error);
+      }
+    }
+    // Clear current draft so next compose starts fresh
+    onDraftCleared();
+    onClose();
+  };
+
   return (
     <>
       {/* Modern Compose Modal */}
       <div className="modern-compose-modal">
           {/* Header */}
-          <div className="bg-gradient-to-r from-blue-500 to-purple-600 text-white p-4 rounded-t-xl">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="font-semibold text-sm">Compose Email</h3>
-                  <p className="text-xs text-blue-100">Create a new message</p>
-                </div>
-              </div>
+                <div className="bg-gradient-to-r from-blue-500 to-purple-600 text-white p-4 rounded-t-xl">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-sm">
+                          {currentDraft ? 'Edit Draft' : 'Compose Email'}
+                        </h3>
+                        <p className="text-xs text-blue-100">
+                          {currentDraft ? 'Continue editing your draft' : 'Create a new message'}
+                        </p>
+                      </div>
+                    </div>
               <div className="flex items-center gap-2">
                 <button 
                   onClick={() => setIsMinimized(!isMinimized)}
@@ -240,11 +379,11 @@ export default function ComposeModal({ onClose, onEmailSent, selectedClient, onC
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isMinimized ? "M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" : "M9 9v6h6V9H9z"} />
                   </svg>
                 </button>
-                <button 
-                  onClick={onClose}
-                  className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
-                  title="Close"
-                >
+                      <button 
+                        onClick={handleClose}
+                        className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
+                        title="Close"
+                      >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
@@ -272,6 +411,31 @@ export default function ComposeModal({ onClose, onEmailSent, selectedClient, onC
                             onClick={onClientCleared}
                             className="text-blue-500 hover:text-blue-700 p-1"
                             title="Clear client"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                      )}
+
+                      {currentDraft && (
+                        <div className="mb-3 p-2 bg-orange-50 border border-orange-200 rounded-lg flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center text-white text-xs font-semibold">
+                              📝
+                            </div>
+                            <div>
+                              <div className="text-sm font-medium text-orange-800">Draft Message</div>
+                              <div className="text-xs text-orange-600">
+                                Last saved: {new Date(currentDraft.lastModified).toLocaleString()}
+                              </div>
+                            </div>
+                          </div>
+                          <button
+                            onClick={onDraftCleared}
+                            className="text-orange-500 hover:text-orange-700 p-1"
+                            title="Clear draft"
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -374,7 +538,7 @@ export default function ComposeModal({ onClose, onEmailSent, selectedClient, onC
               {/* Message Body - Rich Text Canvas */}
               <div className="p-4 flex-1 relative min-h-[200px]">
                 <div
-                  ref={messageRef}
+                  ref={setMessageRef}
                   contentEditable
                   data-placeholder="Start typing your message..."
                   className="w-full border-none outline-none text-sm resize-none h-48 min-h-[160px] max-h-96 overflow-y-auto focus:outline-none p-3 rounded-lg border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
@@ -392,6 +556,7 @@ export default function ComposeModal({ onClose, onEmailSent, selectedClient, onC
                     // Store both HTML and plain text versions
                     const htmlContent = e.target.innerHTML;
                     const textContent = e.target.innerText;
+                    console.log('ContentEditable input - HTML:', htmlContent, 'Text:', textContent);
                     setFormData(prev => ({ 
                       ...prev, 
                       message: textContent, // Use plain text for backend
@@ -429,6 +594,18 @@ export default function ComposeModal({ onClose, onEmailSent, selectedClient, onC
                           toggleUnderline();
                           break;
                       }
+                    }
+                  }}
+                  onFocus={() => {
+                    // Ensure the contentEditable is properly focused and editable
+                    if (messageRef.current) {
+                      messageRef.current.focus();
+                    }
+                  }}
+                  onClick={() => {
+                    // Ensure the contentEditable is properly focused and editable when clicked
+                    if (messageRef.current) {
+                      messageRef.current.focus();
                     }
                   }}
                   suppressContentEditableWarning={true}
@@ -765,19 +942,20 @@ export default function ComposeModal({ onClose, onEmailSent, selectedClient, onC
                       </svg>
                     </button>
                     
-                    <button 
-                      className="modern-toolbar-button text-red-600 hover:text-red-700"
-                      title="Discard"
-                    >
+                          <button 
+                            onClick={handleClose}
+                            className="modern-toolbar-button text-red-600 hover:text-red-700"
+                            title="Discard"
+                          >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                       </svg>
                     </button>
                   </div>
                   
-                  <div className="text-sm text-gray-500">
-                    {status}
-                  </div>
+                        <div className="text-sm text-gray-500">
+                          {status || (isSaving ? 'Saving draft...' : (currentDraft ? 'Draft auto-saved' : 'Auto-save enabled'))}
+                        </div>
                 </div>
               </div>
             </>

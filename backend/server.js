@@ -4,6 +4,7 @@ import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 import multer from "multer";
 import path from "path";
+import mongoose from "mongoose";
 
 dotenv.config();
 const app = express();
@@ -22,6 +23,42 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
+// MongoDB connection
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/email-system';
+
+mongoose.connect(MONGODB_URI)
+.then(() => console.log('✅ Connected to MongoDB'))
+.catch(err => {
+  console.error('❌ MongoDB connection error:', err);
+  console.log('💡 Please install MongoDB or use MongoDB Atlas');
+  console.log('💡 For now, drafts will be stored in memory (temporary)');
+});
+
+// Draft Schema
+const draftSchema = new mongoose.Schema({
+  userId: { type: String, default: 'default-user' },
+  to: String,
+  cc: String,
+  bcc: String,
+  subject: String,
+  message: String,
+  messageHtml: String,
+  attachments: [{
+    name: String,
+    size: Number,
+    path: String
+  }],
+  createdAt: { type: Date, default: Date.now },
+  lastModified: { type: Date, default: Date.now },
+  status: { type: String, default: 'draft' }
+});
+
+const Draft = mongoose.model('Draft', draftSchema);
+
+// Fallback in-memory storage for drafts when MongoDB is not available
+let inMemoryDrafts = [];
+let draftIdCounter = 1;
+
 // Health check endpoint
 app.get("/api/health", (req, res) => {
   res.json({ 
@@ -35,7 +72,7 @@ app.post("/api/send-email", upload.array('attachments'), async (req, res) => {
   console.log("📧 Email request received:", req.body);
   console.log("📎 Files received:", req.files);
   
-  const { to, cc, bcc, subject, message, messageHtml } = req.body;
+  const { to, cc, bcc, subject, message, messageHtml, draftId } = req.body;
 
   // Validate required fields
   if (!to || !subject || !message) {
@@ -101,6 +138,18 @@ app.post("/api/send-email", upload.array('attachments'), async (req, res) => {
     const result = await transporter.sendMail(mailOptions);
 
     console.log("✅ Email sent successfully:", result.messageId);
+    
+    // If this was sent from a draft, delete the draft
+    if (draftId) {
+      try {
+        await Draft.findByIdAndDelete(draftId);
+        console.log("🗑️ Draft deleted after sending:", draftId);
+      } catch (error) {
+        console.error("❌ Error deleting draft:", error);
+        // Don't fail the email send if draft deletion fails
+      }
+    }
+    
     res.json({ success: true, message: "Email sent successfully!" });
   } catch (error) {
     console.error("❌ Email sending error:", error);
@@ -109,6 +158,156 @@ app.post("/api/send-email", upload.array('attachments'), async (req, res) => {
       message: "Failed to send email.",
       error: error.message 
     });
+  }
+});
+
+// Draft API endpoints
+app.get("/api/drafts", async (req, res) => {
+  try {
+    // Try MongoDB first
+    const drafts = await Draft.find({ status: 'draft' }).sort({ lastModified: -1 });
+    res.json({ success: true, drafts });
+  } catch (error) {
+    console.error("❌ Error fetching drafts from MongoDB:", error);
+    // Fallback to in-memory storage
+    console.log("📝 Using in-memory storage for drafts");
+    res.json({ success: true, drafts: inMemoryDrafts });
+  }
+});
+
+app.post("/api/drafts", async (req, res) => {
+  try {
+    const { to, cc, bcc, subject, message, messageHtml, attachments } = req.body;
+    const draft = new Draft({
+      to, cc, bcc, subject, message, messageHtml, attachments
+    });
+    await draft.save();
+    res.json({ success: true, draft });
+  } catch (error) {
+    console.error("❌ Error creating draft in MongoDB:", error);
+    // Fallback to in-memory storage
+    console.log("📝 Creating draft in memory");
+    const draft = {
+      _id: `draft_${draftIdCounter++}`,
+      to, cc, bcc, subject, message, messageHtml, attachments,
+      createdAt: new Date(),
+      lastModified: new Date(),
+      status: 'draft'
+    };
+    inMemoryDrafts.push(draft);
+    res.json({ success: true, draft });
+  }
+});
+
+app.put("/api/drafts/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { to, cc, bcc, subject, message, messageHtml, attachments } = req.body;
+    
+    const draft = await Draft.findByIdAndUpdate(
+      id,
+      { 
+        to, cc, bcc, subject, message, messageHtml, attachments,
+        lastModified: new Date()
+      },
+      { new: true }
+    );
+    
+    if (!draft) {
+      return res.status(404).json({ success: false, message: "Draft not found" });
+    }
+    
+    res.json({ success: true, draft });
+  } catch (error) {
+    console.error("❌ Error updating draft in MongoDB:", error);
+    // Fallback to in-memory storage
+    console.log("📝 Updating draft in memory");
+    const draftIndex = inMemoryDrafts.findIndex(d => d._id === id);
+    if (draftIndex === -1) {
+      return res.status(404).json({ success: false, message: "Draft not found" });
+    }
+    
+    inMemoryDrafts[draftIndex] = {
+      ...inMemoryDrafts[draftIndex],
+      to, cc, bcc, subject, message, messageHtml, attachments,
+      lastModified: new Date()
+    };
+    
+    res.json({ success: true, draft: inMemoryDrafts[draftIndex] });
+  }
+});
+
+app.delete("/api/drafts/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const draft = await Draft.findByIdAndDelete(id);
+    
+    if (!draft) {
+      return res.status(404).json({ success: false, message: "Draft not found" });
+    }
+    
+    res.json({ success: true, message: "Draft deleted successfully" });
+  } catch (error) {
+    console.error("❌ Error deleting draft from MongoDB:", error);
+    // Fallback to in-memory storage
+    console.log("📝 Deleting draft from memory");
+    const draftIndex = inMemoryDrafts.findIndex(d => d._id === id);
+    if (draftIndex === -1) {
+      return res.status(404).json({ success: false, message: "Draft not found" });
+    }
+    
+    inMemoryDrafts.splice(draftIndex, 1);
+    res.json({ success: true, message: "Draft deleted successfully" });
+  }
+});
+
+app.get("/api/drafts/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const draft = await Draft.findById(id);
+    
+    if (!draft) {
+      return res.status(404).json({ success: false, message: "Draft not found" });
+    }
+    
+    res.json({ success: true, draft });
+  } catch (error) {
+    console.error("❌ Error fetching draft:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch draft" });
+  }
+});
+
+// Auto-save draft endpoint
+app.put("/api/drafts/autosave", async (req, res) => {
+  try {
+    const { draftId, to, cc, bcc, subject, message, messageHtml, attachments } = req.body;
+    
+    if (draftId) {
+      // Update existing draft
+      const draft = await Draft.findByIdAndUpdate(
+        draftId,
+        { 
+          to, cc, bcc, subject, message, messageHtml, attachments,
+          lastModified: new Date()
+        },
+        { new: true }
+      );
+      res.json({ success: true, draft });
+    } else {
+      // Create new draft if there's content
+      if (to || subject || message) {
+        const draft = new Draft({
+          to, cc, bcc, subject, message, messageHtml, attachments
+        });
+        await draft.save();
+        res.json({ success: true, draft });
+      } else {
+        res.json({ success: true, message: "No content to save" });
+      }
+    }
+  } catch (error) {
+    console.error("❌ Error auto-saving draft:", error);
+    res.status(500).json({ success: false, message: "Failed to auto-save draft" });
   }
 });
 

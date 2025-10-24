@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-export default function Sidebar({ currentView, setCurrentView, onComposeClick, isOpen, onClose, clients, onClientSelect, onAddClient }) {
+export default function Sidebar({ currentView, setCurrentView, onComposeClick, isOpen, onClose, clients, onClientSelect, onAddClient, drafts, onDraftSelect, onDeleteDraft }) {
   const [showLabels, setShowLabels] = useState(false);
   const [showClients, setShowClients] = useState(false);
   const [showAddClient, setShowAddClient] = useState(false);
@@ -11,7 +11,7 @@ export default function Sidebar({ currentView, setCurrentView, onComposeClick, i
       id: "drafts", 
       label: "Drafts", 
       icon: "📝", 
-      count: "10",
+      count: drafts.length > 0 ? drafts.length.toString() : null,
       color: "orange",
       description: "Unfinished messages"
     }
@@ -128,6 +128,65 @@ export default function Sidebar({ currentView, setCurrentView, onComposeClick, i
             </div>
           </button>
         </nav>
+
+        {/* Drafts Section */}
+        {currentView === "drafts" && (
+          <div className="border-t border-gray-200 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-semibold text-gray-700">Draft Messages</span>
+              <span className="text-xs text-gray-500">{drafts.length} drafts</span>
+            </div>
+            
+            {drafts.length > 0 ? (
+              <div className="space-y-2">
+                {drafts.map((draft) => (
+                  <div
+                    key={draft._id}
+                    className="p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer group"
+                    onClick={() => onDraftSelect(draft)}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-sm font-medium text-gray-800 truncate">
+                            {draft.to || 'No recipient'}
+                          </span>
+                        </div>
+                        <div className="text-sm font-semibold text-gray-900 truncate mb-1">
+                          {draft.subject || 'No subject'}
+                        </div>
+                        <div className="text-xs text-gray-500 truncate">
+                          {draft.message ? draft.message.substring(0, 50) + '...' : 'No content'}
+                        </div>
+                        <div className="text-xs text-gray-400 mt-1">
+                          {new Date(draft.lastModified).toLocaleDateString()} at {new Date(draft.lastModified).toLocaleTimeString()}
+                        </div>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteDraft(draft._id);
+                        }}
+                        className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 p-1 transition-all"
+                        title="Delete draft"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <div className="text-4xl mb-2">📝</div>
+                <div className="text-sm">No drafts yet</div>
+                <div className="text-xs">Start composing to create your first draft</div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Clients Section */}
         <div className="border-t border-gray-200 p-4">
