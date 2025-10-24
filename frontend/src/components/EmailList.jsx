@@ -117,7 +117,7 @@ export default function EmailList({ emails, currentView, setEmails }) {
         
         <div className="flex items-center gap-4">
           <div className="text-sm text-gray-500">
-            {currentView === "sent" ? `${emails.length} sent emails` : "1-50 of 2,004"}
+            {currentView === "sent" ? `${emails.length} sent emails` : `${emails.length} emails`}
           </div>
           <button className="modern-toolbar-button" title="More options">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -129,8 +129,21 @@ export default function EmailList({ emails, currentView, setEmails }) {
 
       {/* Email List */}
       <div className="space-y-1 p-4">
-        {emails.map((email) => (
-          <div
+        {emails.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="text-gray-400 text-6xl mb-4">📧</div>
+            <h3 className="text-lg font-medium text-gray-600 mb-2">
+              {currentView === "sent" ? "No sent emails yet" : "No emails"}
+            </h3>
+            <p className="text-gray-500">
+              {currentView === "sent" 
+                ? "Send your first email to see it here" 
+                : "Your inbox is empty"}
+            </p>
+          </div>
+        ) : (
+          emails.map((email) => (
+            <div
             key={email.id}
             className={`modern-email-item ${!email.isRead ? "unread" : ""} modern-card`}
             onClick={() => {
@@ -217,7 +230,8 @@ export default function EmailList({ emails, currentView, setEmails }) {
               </div>
             )}
           </div>
-        ))}
+          ))
+        )}
       </div>
 
       {/* Pagination */}

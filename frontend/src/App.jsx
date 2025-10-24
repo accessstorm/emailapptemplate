@@ -6,7 +6,7 @@ import EmailList from "./components/EmailList";
 import AddClientModal from "./components/AddClientModal";
 
 function App() {
-  const [currentView, setCurrentView] = useState("inbox");
+  const [currentView, setCurrentView] = useState("sent");
   const [showCompose, setShowCompose] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sentEmails, setSentEmails] = useState([]);
@@ -15,75 +15,11 @@ function App() {
   const [selectedClient, setSelectedClient] = useState(null);
   const [drafts, setDrafts] = useState([]);
   const [currentDraft, setCurrentDraft] = useState(null);
-  const [emails, setEmails] = useState([
-    {
-      id: 1,
-      from: "Google",
-      subject: "Security alert - App password created",
-      preview: "We noticed a new app password was created for your account...",
-      time: "4:20 PM",
-      isRead: false,
-      isStarred: false,
-      avatar: "G",
-      priority: "high"
-    },
-    {
-      id: 2,
-      from: "LinkedIn",
-      subject: "[Important]- Need updated profile for Shortlisting!",
-      preview: "Update your profile to get better job opportunities...",
-      time: "3:45 PM",
-      isRead: false,
-      isStarred: true,
-      avatar: "L",
-      priority: "medium"
-    },
-    {
-      id: 3,
-      from: "Steam",
-      subject: "Backrooms Media from your Steam wishlist is now on",
-      preview: "The game you wishlisted is now available...",
-      time: "2:30 PM",
-      isRead: true,
-      isStarred: false,
-      avatar: "S",
-      priority: "low"
-    },
-    {
-      id: 4,
-      from: "Naukri Campus",
-      subject: "Best CV Formats for Freshers: Simple, Professional &...",
-      preview: "Check out these professional CV templates...",
-      time: "1:15 PM",
-      isRead: true,
-      isStarred: false,
-      avatar: "N",
-      priority: "low"
-    },
-    {
-      id: 5,
-      from: "Hyperskill Crew",
-      subject: "Welcome to Hyperskill -",
-      preview: "Start your programming journey with us...",
-      time: "12:00 PM",
-      isRead: false,
-      isStarred: false,
-      avatar: "H",
-      priority: "medium"
-    },
-  ]);
+  const [emails, setEmails] = useState([]);
 
   const handleEmailSent = (emailData) => {
-    const sentEmail = {
-      id: Date.now(),
-      to: emailData.to,
-      subject: emailData.subject,
-      message: emailData.message,
-      attachments: emailData.attachments || [],
-      timestamp: new Date().toLocaleTimeString(),
-      date: new Date().toLocaleDateString(),
-    };
-    setSentEmails(prev => [sentEmail, ...prev]);
+    // Refresh sent emails list after sending email
+    fetchSentEmails();
     
     // Refresh drafts list after sending email
     fetchDrafts();
@@ -110,6 +46,19 @@ function App() {
   const handleAddClient = (newClient) => {
     setClients(prev => [newClient, ...prev]);
     setShowAddClientModal(false);
+  };
+
+  // Sent Emails API functions
+  const fetchSentEmails = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/sent-emails');
+      const data = await response.json();
+      if (data.success) {
+        setSentEmails(data.sentEmails);
+      }
+    } catch (error) {
+      console.error('Error fetching sent emails:', error);
+    }
   };
 
   // Draft API functions
@@ -183,30 +132,36 @@ function App() {
     setShowCompose(true);
   };
 
-  // Load drafts and clients on component mount
+  // Load drafts, clients, and sent emails on component mount
   useEffect(() => {
     fetchDrafts();
     fetchClients();
+    fetchSentEmails();
   }, []);
 
   const getCurrentEmails = () => {
     if (currentView === "sent") {
       return sentEmails.map(email => ({
-        id: email.id,
+        id: email._id,
         from: "me",
         to: email.to,
         subject: email.subject,
         preview: email.message.substring(0, 50) + "...",
-        time: email.timestamp,
+        time: new Date(email.sentAt).toLocaleTimeString(),
+        date: new Date(email.sentAt).toLocaleDateString(),
         isRead: true,
         isStarred: false,
         attachments: email.attachments || [],
         fullMessage: email.message,
         avatar: "M",
-        priority: "normal"
+        priority: "normal",
+        cc: email.cc,
+        bcc: email.bcc,
+        messageHtml: email.messageHtml
       }));
     }
-    return emails;
+    // For inbox view, return empty array (no dummy emails)
+    return [];
   };
 
   return (
@@ -228,6 +183,7 @@ function App() {
         drafts={drafts}
         onDraftSelect={handleDraftSelect}
         onDeleteDraft={deleteDraft}
+        sentEmails={sentEmails}
       />
       
       {/* Main Content */}

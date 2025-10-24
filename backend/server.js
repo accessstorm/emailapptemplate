@@ -66,6 +66,25 @@ const clientSchema = new mongoose.Schema({
 
 const Client = mongoose.model('Client', clientSchema);
 
+// Sent Email Schema
+const sentEmailSchema = new mongoose.Schema({
+  to: { type: String, required: true },
+  cc: { type: String, default: '' },
+  bcc: { type: String, default: '' },
+  subject: { type: String, required: true },
+  message: { type: String, required: true },
+  messageHtml: { type: String, default: '' },
+  attachments: [{
+    name: String,
+    size: Number,
+    path: String
+  }],
+  sentAt: { type: Date, default: Date.now },
+  status: { type: String, default: 'sent' }
+});
+
+const SentEmail = mongoose.model('SentEmail', sentEmailSchema);
+
 // Fallback in-memory storage for drafts when MongoDB is not available
 let inMemoryDrafts = [];
 let draftIdCounter = 1;
@@ -74,12 +93,20 @@ let draftIdCounter = 1;
 let inMemoryClients = [];
 let clientIdCounter = 1;
 
+// Fallback in-memory storage for sent emails when MongoDB is not available
+let inMemorySentEmails = [];
+let sentEmailIdCounter = 1;
+
 // Health check endpoint
 app.get("/api/health", (req, res) => {
+  const emailConfigured = !!(process.env.EMAIL_USER && process.env.EMAIL_PASS);
   res.json({ 
     status: "OK", 
     message: "Server is running",
-    emailConfigured: !!(process.env.EMAIL_USER && process.env.EMAIL_PASS)
+    emailConfigured,
+    emailUser: process.env.EMAIL_USER ? "Set" : "Missing",
+    emailPass: process.env.EMAIL_PASS ? "Set" : "Missing",
+    instructions: emailConfigured ? "Email is configured" : "Please set EMAIL_USER and EMAIL_PASS in .env file"
   });
 });
 
@@ -101,9 +128,10 @@ app.post("/api/send-email", upload.array('attachments'), async (req, res) => {
   // Check environment variables
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
     console.log("❌ Missing environment variables");
+    console.log("💡 Please create a .env file with EMAIL_USER and EMAIL_PASS");
     return res.status(500).json({ 
       success: false, 
-      message: "Server configuration error: Missing email credentials" 
+      message: "Server configuration error: Missing email credentials. Please check your .env file." 
     });
   }
 
@@ -154,6 +182,23 @@ app.post("/api/send-email", upload.array('attachments'), async (req, res) => {
 
     console.log("✅ Email sent successfully:", result.messageId);
     
+    // Save sent email to database
+    try {
+      const sentEmail = new SentEmail({
+        to, cc, bcc, subject, message, messageHtml,
+        attachments: req.files ? req.files.map(f => ({
+          name: f.originalname,
+          size: f.size,
+          path: f.path
+        })) : []
+      });
+      await sentEmail.save();
+      console.log("💾 Sent email saved to database:", sentEmail._id);
+    } catch (error) {
+      console.error("❌ Error saving sent email:", error);
+      // Don't fail the email send if saving fails
+    }
+    
     // If this was sent from a draft, delete the draft
     if (draftId) {
       try {
@@ -168,9 +213,25 @@ app.post("/api/send-email", upload.array('attachments'), async (req, res) => {
     res.json({ success: true, message: "Email sent successfully!" });
   } catch (error) {
     console.error("❌ Email sending error:", error);
+    
+    let errorMessage = "Failed to send email.";
+    let userMessage = "Please check your email configuration.";
+    
+    if (error.message.includes("Invalid login")) {
+      errorMessage = "Gmail authentication failed";
+      userMessage = "Please check your EMAIL_USER and EMAIL_PASS in .env file. Use App Password, not regular password.";
+    } else if (error.message.includes("Less secure app")) {
+      errorMessage = "Gmail security settings issue";
+      userMessage = "Enable 2-Factor Authentication and use App Password instead of regular password.";
+    } else if (error.message.includes("2-Step Verification")) {
+      errorMessage = "2-Factor Authentication required";
+      userMessage = "Enable 2-Factor Authentication on your Gmail account and generate an App Password.";
+    }
+    
     res.status(500).json({ 
       success: false, 
-      message: "Failed to send email.",
+      message: errorMessage,
+      userMessage: userMessage,
       error: error.message 
     });
   }
@@ -442,6 +503,61 @@ app.delete("/api/clients/:id", async (req, res) => {
     
     inMemoryClients.splice(clientIndex, 1);
     res.json({ success: true, message: "Client deleted successfully" });
+  }
+});
+
+// Sent Emails API endpoints
+app.get("/api/sent-emails", async (req, res) => {
+  try {
+    const sentEmails = await SentEmail.find().sort({ sentAt: -1 });
+    res.json({ success: true, sentEmails });
+  } catch (error) {
+    console.error("❌ Error fetching sent emails from MongoDB:", error);
+    // Fallback to in-memory storage
+    console.log("📤 Using in-memory storage for sent emails");
+    res.json({ success: true, sentEmails: inMemorySentEmails });
+  }
+});
+
+app.get("/api/sent-emails/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const sentEmail = await SentEmail.findById(id);
+    
+    if (!sentEmail) {
+      return res.status(404).json({ success: false, message: "Sent email not found" });
+    }
+    
+    res.json({ success: true, sentEmail });
+  } catch (error) {
+    console.error("❌ Error fetching sent email:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch sent email" });
+  }
+});
+
+app.delete("/api/sent-emails/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const sentEmail = await SentEmail.findByIdAndDelete(id);
+    
+    if (!sentEmail) {
+      return res.status(404).json({ success: false, message: "Sent email not found" });
+    }
+    
+    res.json({ success: true, message: "Sent email deleted successfully" });
+  } catch (error) {
+    console.error("❌ Error deleting sent email from MongoDB:", error);
+    // Fallback to in-memory storage
+    console.log("📤 Deleting sent email from memory");
+    const { id } = req.params;
+    
+    const sentEmailIndex = inMemorySentEmails.findIndex(e => e._id === id);
+    if (sentEmailIndex === -1) {
+      return res.status(404).json({ success: false, message: "Sent email not found" });
+    }
+    
+    inMemorySentEmails.splice(sentEmailIndex, 1);
+    res.json({ success: true, message: "Sent email deleted successfully" });
   }
 });
 

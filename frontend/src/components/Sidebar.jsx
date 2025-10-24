@@ -1,9 +1,18 @@
 import { useState } from "react";
 
-export default function Sidebar({ currentView, setCurrentView, onComposeClick, isOpen, onClose, clients, onClientSelect, onAddClient, drafts, onDraftSelect, onDeleteDraft }) {
+export default function Sidebar({ currentView, setCurrentView, onComposeClick, isOpen, onClose, clients, onClientSelect, onAddClient, drafts, onDraftSelect, onDeleteDraft, sentEmails }) {
   const [openSection, setOpenSection] = useState(null);
 
-  const navigationItems = [];
+  const navigationItems = [
+    { 
+      id: "sent", 
+      label: "Sent", 
+      icon: "📤", 
+      count: sentEmails && sentEmails.length > 0 ? sentEmails.length.toString() : null,
+      color: "green",
+      description: "Sent messages"
+    }
+  ];
 
   const labels = [
     { name: "Work", color: "blue", count: 12 },

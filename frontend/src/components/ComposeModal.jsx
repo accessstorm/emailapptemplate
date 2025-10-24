@@ -317,7 +317,7 @@ export default function ComposeModal({ onClose, onEmailSent, selectedClient, onC
         setAttachments([]);
         setTimeout(() => onClose(), 1500);
       } else {
-        setStatus(`❌ ${data.message || "Failed"}`);
+        setStatus(`❌ ${data.userMessage || data.message || "Failed"}`);
         console.error("Email error:", data);
       }
     } catch (error) {
