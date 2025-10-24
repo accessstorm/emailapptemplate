@@ -55,9 +55,24 @@ const draftSchema = new mongoose.Schema({
 
 const Draft = mongoose.model('Draft', draftSchema);
 
+// Client Schema
+const clientSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  email: { type: String, required: true, unique: true },
+  company: { type: String, default: '' },
+  createdAt: { type: Date, default: Date.now },
+  lastContact: { type: Date, default: Date.now }
+});
+
+const Client = mongoose.model('Client', clientSchema);
+
 // Fallback in-memory storage for drafts when MongoDB is not available
 let inMemoryDrafts = [];
 let draftIdCounter = 1;
+
+// Fallback in-memory storage for clients when MongoDB is not available
+let inMemoryClients = [];
+let clientIdCounter = 1;
 
 // Health check endpoint
 app.get("/api/health", (req, res) => {
@@ -308,6 +323,125 @@ app.put("/api/drafts/autosave", async (req, res) => {
   } catch (error) {
     console.error("❌ Error auto-saving draft:", error);
     res.status(500).json({ success: false, message: "Failed to auto-save draft" });
+  }
+});
+
+// Client API endpoints
+app.get("/api/clients", async (req, res) => {
+  try {
+    const clients = await Client.find().sort({ createdAt: -1 });
+    res.json({ success: true, clients });
+  } catch (error) {
+    console.error("❌ Error fetching clients from MongoDB:", error);
+    // Fallback to in-memory storage
+    console.log("👥 Using in-memory storage for clients");
+    res.json({ success: true, clients: inMemoryClients });
+  }
+});
+
+app.post("/api/clients", async (req, res) => {
+  try {
+    const { name, email, company } = req.body;
+    
+    // Check if client with this email already exists
+    const existingClient = await Client.findOne({ email });
+    if (existingClient) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Client with this email already exists" 
+      });
+    }
+    
+    const client = new Client({ name, email, company });
+    await client.save();
+    res.json({ success: true, client });
+  } catch (error) {
+    console.error("❌ Error creating client in MongoDB:", error);
+    // Fallback to in-memory storage
+    console.log("👥 Creating client in memory");
+    const { name, email, company } = req.body;
+    
+    // Check if client with this email already exists in memory
+    const existingClient = inMemoryClients.find(c => c.email === email);
+    if (existingClient) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Client with this email already exists" 
+      });
+    }
+    
+    const client = {
+      _id: `client_${clientIdCounter++}`,
+      name, email, company,
+      createdAt: new Date(),
+      lastContact: new Date()
+    };
+    inMemoryClients.push(client);
+    res.json({ success: true, client });
+  }
+});
+
+app.put("/api/clients/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, email, company } = req.body;
+    
+    const client = await Client.findByIdAndUpdate(
+      id,
+      { name, email, company, lastContact: new Date() },
+      { new: true }
+    );
+    
+    if (!client) {
+      return res.status(404).json({ success: false, message: "Client not found" });
+    }
+    
+    res.json({ success: true, client });
+  } catch (error) {
+    console.error("❌ Error updating client in MongoDB:", error);
+    // Fallback to in-memory storage
+    console.log("👥 Updating client in memory");
+    const { id } = req.params;
+    const { name, email, company } = req.body;
+    
+    const clientIndex = inMemoryClients.findIndex(c => c._id === id);
+    if (clientIndex === -1) {
+      return res.status(404).json({ success: false, message: "Client not found" });
+    }
+    
+    inMemoryClients[clientIndex] = {
+      ...inMemoryClients[clientIndex],
+      name, email, company,
+      lastContact: new Date()
+    };
+    
+    res.json({ success: true, client: inMemoryClients[clientIndex] });
+  }
+});
+
+app.delete("/api/clients/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const client = await Client.findByIdAndDelete(id);
+    
+    if (!client) {
+      return res.status(404).json({ success: false, message: "Client not found" });
+    }
+    
+    res.json({ success: true, message: "Client deleted successfully" });
+  } catch (error) {
+    console.error("❌ Error deleting client from MongoDB:", error);
+    // Fallback to in-memory storage
+    console.log("👥 Deleting client from memory");
+    const { id } = req.params;
+    
+    const clientIndex = inMemoryClients.findIndex(c => c._id === id);
+    if (clientIndex === -1) {
+      return res.status(404).json({ success: false, message: "Client not found" });
+    }
+    
+    inMemoryClients.splice(clientIndex, 1);
+    res.json({ success: true, message: "Client deleted successfully" });
   }
 });
 

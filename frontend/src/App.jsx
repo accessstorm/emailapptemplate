@@ -1,19 +1,17 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import ComposeModal from "./components/ComposeModal";
 import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
 import EmailList from "./components/EmailList";
+import AddClientModal from "./components/AddClientModal";
 
 function App() {
   const [currentView, setCurrentView] = useState("inbox");
   const [showCompose, setShowCompose] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sentEmails, setSentEmails] = useState([]);
-  const [clients, setClients] = useState([
-    { id: 1, name: "John Smith", email: "john.smith@example.com", company: "Tech Corp" },
-    { id: 2, name: "Sarah Johnson", email: "sarah.j@company.com", company: "Design Studio" },
-    { id: 3, name: "Mike Wilson", email: "mike.wilson@business.com", company: "Business Inc" }
-  ]);
+  const [clients, setClients] = useState([]);
+  const [showAddClientModal, setShowAddClientModal] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);
   const [drafts, setDrafts] = useState([]);
   const [currentDraft, setCurrentDraft] = useState(null);
@@ -96,12 +94,22 @@ function App() {
     setShowCompose(true);
   };
 
+  // Client API functions
+  const fetchClients = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/clients');
+      const data = await response.json();
+      if (data.success) {
+        setClients(data.clients);
+      }
+    } catch (error) {
+      console.error('Error fetching clients:', error);
+    }
+  };
+
   const handleAddClient = (newClient) => {
-    const client = {
-      id: Date.now(),
-      ...newClient
-    };
-    setClients(prev => [...prev, client]);
+    setClients(prev => [newClient, ...prev]);
+    setShowAddClientModal(false);
   };
 
   // Draft API functions
@@ -175,9 +183,10 @@ function App() {
     setShowCompose(true);
   };
 
-  // Load drafts on component mount
-  React.useEffect(() => {
+  // Load drafts and clients on component mount
+  useEffect(() => {
     fetchDrafts();
+    fetchClients();
   }, []);
 
   const getCurrentEmails = () => {
@@ -215,7 +224,7 @@ function App() {
         onClose={() => setSidebarOpen(false)}
         clients={clients}
         onClientSelect={handleClientSelect}
-        onAddClient={handleAddClient}
+        onAddClient={() => setShowAddClientModal(true)}
         drafts={drafts}
         onDraftSelect={handleDraftSelect}
         onDeleteDraft={deleteDraft}
@@ -248,6 +257,15 @@ function App() {
           onDraftCleared={() => setCurrentDraft(null)}
           onSaveDraft={saveDraft}
           onUpdateDraft={updateDraft}
+        />
+      )}
+
+      {/* Add Client Modal */}
+      {showAddClientModal && (
+        <AddClientModal
+          isOpen={showAddClientModal}
+          onClose={() => setShowAddClientModal(false)}
+          onClientAdded={handleAddClient}
         />
       )}
       
