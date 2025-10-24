@@ -153,11 +153,21 @@ app.post("/api/send-email", upload.array('attachments'), async (req, res) => {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
       },
+      // Add timeout and connection settings for faster sending
+      connectionTimeout: 10000, // 10 seconds
+      greetingTimeout: 5000,    // 5 seconds
+      socketTimeout: 10000,     // 10 seconds
+      pool: true,               // Use connection pooling
+      maxConnections: 1,        // Limit connections
+      maxMessages: 1,           // Limit messages per connection
     });
 
     console.log("🔄 Verifying transporter connection...");
     await transporter.verify();
     console.log("✅ Transporter verified successfully");
+    
+    // Store the transporter globally to reuse it
+    global.transporter = transporter;
 
     console.log("📤 Sending email to:", to);
     
@@ -187,7 +197,17 @@ app.post("/api/send-email", upload.array('attachments'), async (req, res) => {
       }));
     }
 
-    const result = await transporter.sendMail(mailOptions);
+    // Add timeout to email sending
+    const sendEmailWithTimeout = (transporter, mailOptions) => {
+      return Promise.race([
+        transporter.sendMail(mailOptions),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Email sending timeout after 30 seconds')), 30000)
+        )
+      ]);
+    };
+
+    const result = await sendEmailWithTimeout(global.transporter, mailOptions);
 
     console.log("✅ Email sent successfully:", result.messageId);
     

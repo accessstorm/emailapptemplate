@@ -24,6 +24,7 @@ export default function ComposeModal({ onClose, onEmailSent, selectedClient, onC
   const [isUnderline, setIsUnderline] = useState(false);
   const [textAlign, setTextAlign] = useState("left");
   const [isSaving, setIsSaving] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   const [isUserWorking, setIsUserWorking] = useState(false);
   const fileInputRef = useRef(null);
   const messageRef = useRef(null);
@@ -289,7 +290,10 @@ export default function ComposeModal({ onClose, onEmailSent, selectedClient, onC
   }, [showEmojiPicker]);
 
   const handleSend = async () => {
-    setStatus("Sending...");
+    if (isSending) return; // Prevent multiple sends
+    
+    setIsSending(true);
+    setStatus("Sending email...");
     try {
       // Create FormData for file uploads
       const formDataToSend = new FormData();
@@ -319,6 +323,7 @@ export default function ComposeModal({ onClose, onEmailSent, selectedClient, onC
       
       if (data.success) {
         setStatus("✅ Sent!");
+        setIsSending(false);
         // Call the callback to add to sent emails
         onEmailSent({
           ...formData,
@@ -330,10 +335,12 @@ export default function ComposeModal({ onClose, onEmailSent, selectedClient, onC
         setTimeout(() => onClose(), 1500);
       } else {
         setStatus(`❌ ${data.userMessage || data.message || "Failed"}`);
+        setIsSending(false);
         console.error("Email error:", data);
       }
     } catch (error) {
       setStatus("❌ Connection Error");
+      setIsSending(false);
       console.error("Network error:", error);
     }
   };
@@ -841,12 +848,13 @@ export default function ComposeModal({ onClose, onEmailSent, selectedClient, onC
                     <div className="flex items-center">
                       <button
                         onClick={handleSend}
-                        className="btn-accent flex items-center gap-2 shadow-glow"
+                        disabled={isSending}
+                        className={`btn-accent flex items-center gap-2 shadow-glow ${isSending ? 'opacity-50 cursor-not-allowed' : ''}`}
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                         </svg>
-                        Send
+                        {isSending ? 'Sending...' : 'Send'}
                       </button>
                       <button
                         onClick={() => setShowSendOptions(!showSendOptions)}
