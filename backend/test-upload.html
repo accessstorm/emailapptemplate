@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test File Upload</title>
+</head>
+<body>
+    <h1>Test File Upload</h1>
+    <form id="uploadForm">
+        <div>
+            <label>To:</label>
+            <input type="email" name="to" value="test@example.com" required>
+        </div>
+        <div>
+            <label>Subject:</label>
+            <input type="text" name="subject" value="Test Email" required>
+        </div>
+        <div>
+            <label>Message:</label>
+            <textarea name="message" required>This is a test email</textarea>
+        </div>
+        <div>
+            <label>Attachments:</label>
+            <input type="file" name="attachments" multiple>
+        </div>
+        <button type="submit">Send Test Email</button>
+    </form>
+    
+    <div id="result"></div>
+    
+    <script>
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            
+            try {
+                const response = await fetch('http://localhost:5000/api/send-email', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                document.getElementById('result').innerHTML = 
+                    `<pre>${JSON.stringify(result, null, 2)}</pre>`;
+            } catch (error) {
+                document.getElementById('result').innerHTML = 
+                    `<p style="color: red;">Error: ${error.message}</p>`;
+            }
+        });
+    </script>
+</body>
+</html>

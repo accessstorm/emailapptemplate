@@ -10,18 +10,19 @@ dotenv.config();
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static('uploads'));
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/');
+// Configure multer for file uploads - use memory storage for MongoDB integration
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB limit
   },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + '-' + file.originalname);
+  fileFilter: (req, file, cb) => {
+    // Allow all file types for now, but you can restrict if needed
+    cb(null, true);
   }
 });
-
-const upload = multer({ storage: storage });
 
 // MongoDB connection
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/email-system';
@@ -77,7 +78,9 @@ const sentEmailSchema = new mongoose.Schema({
   attachments: [{
     name: String,
     size: Number,
-    path: String
+    path: String,
+    data: Buffer, // Store file data in MongoDB
+    contentType: String
   }],
   sentAt: { type: Date, default: Date.now },
   status: { type: String, default: 'sent' }
@@ -111,8 +114,14 @@ app.get("/api/health", (req, res) => {
 });
 
 app.post("/api/send-email", upload.array('attachments'), async (req, res) => {
-  console.log("📧 Email request received:", req.body);
-  console.log("📎 Files received:", req.files);
+  
+  // Handle multer errors
+  if (req.fileValidationError) {
+    return res.status(400).json({ 
+      success: false, 
+      message: req.fileValidationError 
+    });
+  }
   
   const { to, cc, bcc, subject, message, messageHtml, draftId } = req.body;
 
@@ -171,10 +180,10 @@ app.post("/api/send-email", upload.array('attachments'), async (req, res) => {
 
     // Add attachments if any
     if (req.files && req.files.length > 0) {
-      console.log("📎 Adding attachments:", req.files.map(f => f.originalname));
       mailOptions.attachments = req.files.map(file => ({
         filename: file.originalname,
-        path: file.path
+        content: file.buffer,
+        contentType: file.mimetype
       }));
     }
 
@@ -182,14 +191,16 @@ app.post("/api/send-email", upload.array('attachments'), async (req, res) => {
 
     console.log("✅ Email sent successfully:", result.messageId);
     
-    // Save sent email to database
+    // Only save to database AFTER email is successfully sent
     try {
       const sentEmail = new SentEmail({
         to, cc, bcc, subject, message, messageHtml,
         attachments: req.files ? req.files.map(f => ({
           name: f.originalname,
           size: f.size,
-          path: f.path
+          path: '', // No file path since using memory storage
+          data: f.buffer, // Store file data
+          contentType: f.mimetype
         })) : []
       });
       await sentEmail.save();
@@ -558,6 +569,33 @@ app.delete("/api/sent-emails/:id", async (req, res) => {
     
     inMemorySentEmails.splice(sentEmailIndex, 1);
     res.json({ success: true, message: "Sent email deleted successfully" });
+  }
+});
+
+// Serve attachments from MongoDB
+app.get("/api/attachments/:emailId/:attachmentIndex", async (req, res) => {
+  try {
+    const { emailId, attachmentIndex } = req.params;
+    const sentEmail = await SentEmail.findById(emailId);
+    
+    if (!sentEmail || !sentEmail.attachments || !sentEmail.attachments[attachmentIndex]) {
+      return res.status(404).json({ success: false, message: "Attachment not found" });
+    }
+    
+    const attachment = sentEmail.attachments[attachmentIndex];
+    
+    // Set appropriate headers
+    res.set({
+      'Content-Type': attachment.contentType || 'application/octet-stream',
+      'Content-Length': attachment.size,
+      'Content-Disposition': `inline; filename="${attachment.name}"`
+    });
+    
+    // Send the file data
+    res.send(attachment.data);
+  } catch (error) {
+    console.error("❌ Error serving attachment:", error);
+    res.status(500).json({ success: false, message: "Error serving attachment" });
   }
 });
 

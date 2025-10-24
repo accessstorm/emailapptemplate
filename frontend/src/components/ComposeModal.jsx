@@ -24,8 +24,10 @@ export default function ComposeModal({ onClose, onEmailSent, selectedClient, onC
   const [isUnderline, setIsUnderline] = useState(false);
   const [textAlign, setTextAlign] = useState("left");
   const [isSaving, setIsSaving] = useState(false);
+  const [isUserWorking, setIsUserWorking] = useState(false);
   const fileInputRef = useRef(null);
   const messageRef = useRef(null);
+  
   
   // Callback ref to handle contentEditable initialization
   const setMessageRef = (node) => {
@@ -44,6 +46,11 @@ export default function ComposeModal({ onClose, onEmailSent, selectedClient, onC
 
   // Load draft data when currentDraft changes
   useEffect(() => {
+    // Don't reset attachments if user is actively working
+    if (isUserWorking) {
+      return;
+    }
+    
     if (currentDraft) {
       console.log('Loading draft:', currentDraft);
       setFormData({
@@ -54,6 +61,7 @@ export default function ComposeModal({ onClose, onEmailSent, selectedClient, onC
         message: currentDraft.message || "",
         messageHtml: currentDraft.messageHtml || ""
       });
+      console.log("📎 Loading draft attachments:", currentDraft.attachments);
       setAttachments(currentDraft.attachments || []);
     } else {
       // Clear form when starting fresh
@@ -65,9 +73,10 @@ export default function ComposeModal({ onClose, onEmailSent, selectedClient, onC
         message: "",
         messageHtml: ""
       });
+      console.log("📎 Clearing attachments for fresh start");
       setAttachments([]);
     }
-  }, [currentDraft]);
+  }, [currentDraft, isUserWorking]);
 
   // Restore contentEditable content when currentDraft changes
   useEffect(() => {
@@ -157,10 +166,12 @@ export default function ComposeModal({ onClose, onEmailSent, selectedClient, onC
       size: file.size,
       file: file
     }));
+    setIsUserWorking(true); // Mark that user is actively working
     setAttachments(prev => [...prev, ...newAttachments]);
   };
 
   const removeAttachment = (id) => {
+    setIsUserWorking(true); // Mark that user is actively working
     setAttachments(prev => prev.filter(attachment => attachment.id !== id));
   };
 
@@ -315,6 +326,7 @@ export default function ComposeModal({ onClose, onEmailSent, selectedClient, onC
         });
         setFormData({ to: "", cc: "", bcc: "", subject: "", message: "", messageHtml: "" });
         setAttachments([]);
+        setIsUserWorking(false); // Reset user working flag
         setTimeout(() => onClose(), 1500);
       } else {
         setStatus(`❌ ${data.userMessage || data.message || "Failed"}`);
@@ -343,6 +355,7 @@ export default function ComposeModal({ onClose, onEmailSent, selectedClient, onC
       }
     }
     // Clear current draft so next compose starts fresh
+    setIsUserWorking(false); // Reset user working flag
     onDraftCleared();
     onClose();
   };

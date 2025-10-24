@@ -218,15 +218,32 @@ export default function EmailList({ emails, currentView, setEmails }) {
             {/* Show attachments if any */}
             {email.attachments && email.attachments.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-2">
-                {email.attachments.map((attachment, index) => (
-                  <div key={index} className="flex items-center gap-1 bg-gray-100 rounded-lg px-2 py-1 text-xs">
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                    </svg>
-                    <span className="truncate max-w-20">{attachment.name}</span>
-                    <span className="text-gray-500">({formatFileSize(attachment.size)})</span>
-                  </div>
-                ))}
+                {email.attachments.map((attachment, index) => {
+                  const isImage = attachment.name && /\.(jpg|jpeg|png|gif|webp)$/i.test(attachment.name);
+                  const attachmentUrl = `http://localhost:5000/api/attachments/${email.id}/${index}`;
+                  
+                  return (
+                    <div key={index} className="flex items-center gap-1 bg-gray-100 rounded-lg px-2 py-1 text-xs">
+                      {isImage ? (
+                        <img 
+                          src={attachmentUrl} 
+                          alt={attachment.name}
+                          className="w-4 h-4 object-cover rounded"
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                            e.target.nextSibling.style.display = 'block';
+                          }}
+                        />
+                      ) : (
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                        </svg>
+                      )}
+                      <span className="truncate max-w-20">{attachment.name}</span>
+                      <span className="text-gray-500">({formatFileSize(attachment.size)})</span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -300,23 +317,40 @@ export default function EmailList({ emails, currentView, setEmails }) {
                 <div className="border-t border-gray-200 pt-4">
                   <h3 className="font-medium text-gray-700 mb-3">Attachments:</h3>
                   <div className="space-y-2">
-                    {selectedEmail.attachments.map((attachment, index) => (
-                      <div key={index} className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
-                        <div className="flex items-center gap-3">
-                          <span className="text-2xl">📎</span>
-                          <div>
-                            <div className="font-medium text-gray-800">{attachment.name}</div>
-                            <div className="text-sm text-gray-500">{formatFileSize(attachment.size)}</div>
+                    {selectedEmail.attachments.map((attachment, index) => {
+                      const isImage = attachment.name && /\.(jpg|jpeg|png|gif|webp)$/i.test(attachment.name);
+                      const attachmentUrl = `http://localhost:5000/api/attachments/${selectedEmail.id}/${index}`;
+                      
+                      return (
+                        <div key={index} className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
+                          <div className="flex items-center gap-3">
+                            {isImage ? (
+                              <img 
+                                src={attachmentUrl} 
+                                alt={attachment.name}
+                                className="w-12 h-12 object-cover rounded"
+                                onError={(e) => {
+                                  e.target.style.display = 'none';
+                                  e.target.nextSibling.style.display = 'block';
+                                }}
+                              />
+                            ) : (
+                              <span className="text-2xl">📎</span>
+                            )}
+                            <div>
+                              <div className="font-medium text-gray-800">{attachment.name}</div>
+                              <div className="text-sm text-gray-500">{formatFileSize(attachment.size)}</div>
+                            </div>
                           </div>
+                          <button
+                            onClick={() => handleDownloadAttachment(attachment)}
+                            className="btn-primary"
+                          >
+                            Download
+                          </button>
                         </div>
-                        <button
-                          onClick={() => handleDownloadAttachment(attachment)}
-                          className="btn-primary"
-                        >
-                          Download
-                        </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
