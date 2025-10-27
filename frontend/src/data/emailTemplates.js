@@ -404,5 +404,6 @@ export const templateCategories = [
   'Finance',
   'Customer Service',
   'Scheduling',
+  'Your Templates',
   'Custom'
 ];

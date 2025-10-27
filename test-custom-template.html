@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Custom Template Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
+        .template-preview { background: #f9f9f9; padding: 15px; border-radius: 5px; margin: 10px 0; }
+        .variable { background: #e3f2fd; padding: 2px 6px; border-radius: 3px; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <h1>Custom Template Test</h1>
+    
+    <div class="test-section">
+        <h2>Test Custom Template Variables</h2>
+        <p>This tests the variable replacement functionality:</p>
+        
+        <div class="template-preview">
+            <h3>Subject: Meeting with <span class="variable">{{recipientName}}</span></h3>
+            <div>
+                <p>Dear <span class="variable">{{recipientName}}</span>,</p>
+                <p>I hope this email finds you well. I'm <span class="variable">{{yourName}}</span>, 
+                <span class="variable">{{yourTitle}}</span> at <span class="variable">{{companyName}}</span>.</p>
+                <p>I would like to schedule a meeting to discuss the project details.</p>
+                <p>Best regards,<br>
+                <span class="variable">{{yourName}}</span><br>
+                <span class="variable">{{yourTitle}}</span><br>
+                <span class="variable">{{companyName}}</span></p>
+            </div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Expected After Variable Replacement</h2>
+        <div class="template-preview">
+            <h3>Subject: Meeting with John Doe</h3>
+            <div>
+                <p>Dear John Doe,</p>
+                <p>I hope this email finds you well. I'm Your Name, 
+                Your Title at Your Company.</p>
+                <p>I would like to schedule a meeting to discuss the project details.</p>
+                <p>Best regards,<br>
+                Your Name<br>
+                Your Title<br>
+                Your Company</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Test the variable replacement function
+        function testVariableReplacement() {
+            const testHtml = `
+                <h3>Subject: Meeting with {{recipientName}}</h3>
+                <div>
+                    <p>Dear {{recipientName}},</p>
+                    <p>I'm {{yourName}}, {{yourTitle}} at {{companyName}}.</p>
+                </div>
+            `;
+            
+            const replacements = {
+                '{{recipientName}}': 'John Doe',
+                '{{yourName}}': 'Your Name',
+                '{{yourTitle}}': 'Your Title',
+                '{{companyName}}': 'Your Company'
+            };
+            
+            let processedHtml = testHtml;
+            Object.entries(replacements).forEach(([variable, replacement]) => {
+                processedHtml = processedHtml.replace(new RegExp(variable, 'g'), replacement);
+            });
+            
+            console.log('Original:', testHtml);
+            console.log('Processed:', processedHtml);
+            
+            // Create a test result div
+            const resultDiv = document.createElement('div');
+            resultDiv.className = 'test-section';
+            resultDiv.innerHTML = `
+                <h2>JavaScript Test Result</h2>
+                <div class="template-preview">
+                    <h4>Processed HTML:</h4>
+                    <pre>${processedHtml}</pre>
+                </div>
+            `;
+            document.body.appendChild(resultDiv);
+        }
+        
+        // Run the test
+        testVariableReplacement();
+    </script>
+</body>
+</html>

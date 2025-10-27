@@ -11,42 +11,145 @@ export default function TemplateModal({ isOpen, onClose, onSelectTemplate }) {
     content: '',
     title: ''
   });
+  const [userTemplates, setUserTemplates] = useState([]);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Load user templates from localStorage on component mount
+  React.useEffect(() => {
+    const savedTemplates = localStorage.getItem('userEmailTemplates');
+    if (savedTemplates) {
+      try {
+        const parsedTemplates = JSON.parse(savedTemplates);
+        setUserTemplates(parsedTemplates);
+        console.log('Loaded user templates:', parsedTemplates);
+      } catch (error) {
+        console.error('Error loading user templates:', error);
+        setUserTemplates([]);
+      }
+    }
+  }, []);
+
+  // Debug custom template changes
+  React.useEffect(() => {
+    console.log('Custom template updated:', customTemplate);
+  }, [customTemplate]);
+
+  // Safe variable replacement function
+  const replaceVariables = (content) => {
+    if (!content || typeof content !== 'string') {
+      return '';
+    }
+    
+    try {
+      // Ensure content is a string and not null/undefined
+      const safeContent = String(content);
+      return safeContent
+        .replace(/\{\{recipientName\}\}/g, 'John Doe')
+        .replace(/\{\{yourName\}\}/g, 'Your Name')
+        .replace(/\{\{yourTitle\}\}/g, 'Your Title')
+        .replace(/\{\{companyName\}\}/g, 'Your Company');
+    } catch (error) {
+      console.error('Error replacing variables:', error);
+      return String(content || '');
+    }
+  };
+
+  // Save template to user templates
+  const saveToUserTemplates = async () => {
+    if (!customTemplate.name || !customTemplate.subject || !customTemplate.content || !customTemplate.content.trim()) {
+      alert('Please fill in all required fields before saving');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const newTemplate = {
+        id: `user_${Date.now()}`,
+        name: customTemplate.name.trim(),
+        subject: customTemplate.subject.trim(),
+        html: customTemplate.content.trim(),
+        category: 'Your Templates',
+        description: 'Your custom template',
+        variables: ['recipientName', 'yourName', 'yourTitle', 'companyName'],
+        isUserTemplate: true,
+        createdAt: new Date().toISOString()
+      };
+
+      const updatedTemplates = [...userTemplates, newTemplate];
+      setUserTemplates(updatedTemplates);
+      localStorage.setItem('userEmailTemplates', JSON.stringify(updatedTemplates));
+      
+      alert('Template saved to Your Templates!');
+      console.log('Template saved:', newTemplate);
+    } catch (error) {
+      console.error('Error saving template:', error);
+      alert('Error saving template. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Delete user template
+  const deleteUserTemplate = (templateId) => {
+    if (window.confirm('Are you sure you want to delete this template?')) {
+      const updatedTemplates = userTemplates.filter(template => template.id !== templateId);
+      setUserTemplates(updatedTemplates);
+      localStorage.setItem('userEmailTemplates', JSON.stringify(updatedTemplates));
+      console.log('Template deleted:', templateId);
+    }
+  };
 
   const filteredTemplates = useMemo(() => {
     if (selectedCategory === 'All') {
-      return emailTemplates;
+      return [...emailTemplates, ...userTemplates];
+    } else if (selectedCategory === 'Your Templates') {
+      return userTemplates;
     }
     return emailTemplates.filter(template => template.category === selectedCategory);
-  }, [selectedCategory]);
+  }, [selectedCategory, userTemplates]);
 
   const handleTemplateSelect = (template) => {
+    console.log('Template selected:', template);
+    
     if (template.isCustom) {
+      // For custom template, initialize with default values
+      console.log('Initializing custom template');
       setCustomTemplate({
-        name: template.name,
-        subject: template.subject,
-        content: template.html,
-        title: template.html.match(/<h2[^>]*>(.*?)<\/h2>/)?.[1] || 'Custom Email'
+        name: '',
+        subject: '',
+        content: '',
+        title: ''
       });
+      setSelectedTemplate(null); // Clear selected template
     } else {
+      console.log('Selecting predefined template:', template.name);
       setSelectedTemplate(template);
+      setCustomTemplate({ name: '', subject: '', content: '', title: '' }); // Clear custom template
     }
     setShowPreview(true);
   };
 
   const handleApplyTemplate = () => {
-    if (selectedTemplate) {
-      onSelectTemplate(selectedTemplate);
-      onClose();
-    } else if (customTemplate.name) {
-      const customTemplateData = {
-        id: 'custom',
-        name: customTemplate.name,
-        subject: customTemplate.subject,
-        html: customTemplate.content,
-        variables: ['recipientName', 'yourName', 'yourTitle', 'companyName']
-      };
-      onSelectTemplate(customTemplateData);
-      onClose();
+    try {
+      if (selectedTemplate) {
+        onSelectTemplate(selectedTemplate);
+        onClose();
+      } else if (customTemplate.name && customTemplate.subject && customTemplate.content && customTemplate.content.trim()) {
+        const customTemplateData = {
+          id: 'custom',
+          name: customTemplate.name.trim(),
+          subject: customTemplate.subject.trim(),
+          html: customTemplate.content.trim(),
+          variables: ['recipientName', 'yourName', 'yourTitle', 'companyName']
+        };
+        onSelectTemplate(customTemplateData);
+        onClose();
+      } else {
+        alert('Please fill in all required fields: Template Name, Subject, and Content');
+      }
+    } catch (error) {
+      console.error('Error applying template:', error);
+      alert('Error applying template. Please try again.');
     }
   };
 
@@ -59,9 +162,10 @@ export default function TemplateModal({ isOpen, onClose, onSelectTemplate }) {
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
+  try {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-4 flex items-center justify-between">
           <div>
@@ -107,15 +211,17 @@ export default function TemplateModal({ isOpen, onClose, onSelectTemplate }) {
                 {filteredTemplates.map(template => (
                   <div
                     key={template.id}
-                    onClick={() => handleTemplateSelect(template)}
-                    className={`p-4 border rounded-lg cursor-pointer transition-all hover:shadow-md ${
+                    className={`p-4 border rounded-lg transition-all hover:shadow-md ${
                       selectedTemplate?.id === template.id
                         ? 'border-blue-500 bg-blue-50'
                         : 'border-gray-200 hover:border-gray-300'
                     }`}
                   >
                     <div className="flex items-start justify-between">
-                      <div className="flex-1">
+                      <div 
+                        className="flex-1 cursor-pointer"
+                        onClick={() => handleTemplateSelect(template)}
+                      >
                         <h4 className="font-semibold text-gray-800">{template.name}</h4>
                         <p className="text-sm text-gray-600 mt-1">{template.description}</p>
                         <div className="flex items-center gap-2 mt-2">
@@ -127,11 +233,32 @@ export default function TemplateModal({ isOpen, onClose, onSelectTemplate }) {
                               Custom
                             </span>
                           )}
+                          {template.isUserTemplate && (
+                            <span className="text-xs px-2 py-1 bg-green-100 text-green-600 rounded">
+                              Your Template
+                            </span>
+                          )}
                         </div>
                       </div>
-                      <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
+                      <div className="flex items-center gap-2">
+                        {template.isUserTemplate && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteUserTemplate(template.id);
+                            }}
+                            className="p-1 text-red-500 hover:text-red-700 hover:bg-red-100 rounded transition-colors"
+                            title="Delete template"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        )}
+                        <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -156,7 +283,12 @@ export default function TemplateModal({ isOpen, onClose, onSelectTemplate }) {
                     </div>
                     <button
                       onClick={handleApplyTemplate}
-                      className="btn-primary flex items-center gap-2"
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+                        selectedTemplate || (customTemplate.name && customTemplate.subject && customTemplate.content && customTemplate.content.trim())
+                          ? 'bg-blue-500 text-white hover:bg-blue-600'
+                          : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      }`}
+                      disabled={!selectedTemplate && (!customTemplate.name || !customTemplate.subject || !customTemplate.content || !customTemplate.content.trim())}
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -173,50 +305,123 @@ export default function TemplateModal({ isOpen, onClose, onSelectTemplate }) {
                       <div dangerouslySetInnerHTML={{ __html: selectedTemplate.html }} />
                     </div>
                   ) : (
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Template Name
-                        </label>
-                        <input
-                          type="text"
-                          value={customTemplate.name}
-                          onChange={(e) => setCustomTemplate({...customTemplate, name: e.target.value})}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="Enter template name"
-                        />
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
+                      {/* Custom Template Form */}
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Template Name *
+                          </label>
+                          <input
+                            type="text"
+                            value={customTemplate.name}
+                            onChange={(e) => setCustomTemplate({...customTemplate, name: e.target.value})}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Enter template name"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Subject Line *
+                          </label>
+                          <input
+                            type="text"
+                            value={customTemplate.subject}
+                            onChange={(e) => setCustomTemplate({...customTemplate, subject: e.target.value})}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Enter email subject"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Email Content (HTML) *
+                          </label>
+                          <textarea
+                            value={customTemplate.content}
+                            onChange={(e) => setCustomTemplate({...customTemplate, content: e.target.value})}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent h-64"
+                            placeholder="Enter your custom HTML content"
+                          />
+                        </div>
+                        <div className="bg-blue-50 p-4 rounded-lg">
+                          <h4 className="font-medium text-blue-800 mb-2">Available Variables:</h4>
+                          <p className="text-sm text-blue-700 mb-2">
+                            Use these variables in your content and subject:
+                          </p>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div className="flex items-center gap-1">
+                              <code className="bg-blue-100 px-1 rounded">{'{{recipientName}}'}</code>
+                              <span className="text-blue-600">→ Recipient's name</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <code className="bg-blue-100 px-1 rounded">{'{{yourName}}'}</code>
+                              <span className="text-blue-600">→ Your name</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <code className="bg-blue-100 px-1 rounded">{'{{yourTitle}}'}</code>
+                              <span className="text-blue-600">→ Your title</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <code className="bg-blue-100 px-1 rounded">{'{{companyName}}'}</code>
+                              <span className="text-blue-600">→ Your company</span>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="bg-green-50 p-4 rounded-lg">
+                          <h4 className="font-medium text-green-800 mb-2">💡 Tips:</h4>
+                          <ul className="text-sm text-green-700 space-y-1">
+                            <li>• Use HTML tags for formatting (bold, italic, lists)</li>
+                            <li>• Variables will be replaced with placeholder text</li>
+                            <li>• Preview updates in real-time as you type</li>
+                          </ul>
+                        </div>
+                        
+                        {/* Save to Your Templates Button */}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={saveToUserTemplates}
+                            disabled={isSaving || !customTemplate.name || !customTemplate.subject || !customTemplate.content || !customTemplate.content.trim()}
+                            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+                              isSaving || !customTemplate.name || !customTemplate.subject || !customTemplate.content || !customTemplate.content.trim()
+                                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                : 'bg-green-500 text-white hover:bg-green-600'
+                            }`}
+                          >
+                            {isSaving ? (
+                              <>
+                                <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                                Saving...
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3-3m0 0l-3 3m3-3v12" />
+                                </svg>
+                                Save to Your Templates
+                              </>
+                            )}
+                          </button>
+                        </div>
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Subject Line
-                        </label>
-                        <input
-                          type="text"
-                          value={customTemplate.subject}
-                          onChange={(e) => setCustomTemplate({...customTemplate, subject: e.target.value})}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="Enter email subject"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Email Content (HTML)
-                        </label>
-                        <textarea
-                          value={customTemplate.content}
-                          onChange={(e) => setCustomTemplate({...customTemplate, content: e.target.value})}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent h-64"
-                          placeholder="Enter your custom HTML content"
-                        />
-                      </div>
-                      <div className="bg-blue-50 p-4 rounded-lg">
-                        <h4 className="font-medium text-blue-800 mb-2">Available Variables:</h4>
-                        <p className="text-sm text-blue-700">
-                          Use <code className="bg-blue-100 px-1 rounded">{{recipientName}}</code>, 
-                          <code className="bg-blue-100 px-1 rounded">{{yourName}}</code>, 
-                          <code className="bg-blue-100 px-1 rounded">{{yourTitle}}</code>, 
-                          <code className="bg-blue-100 px-1 rounded">{{companyName}}</code> in your content
-                        </p>
+
+                      {/* Live Preview */}
+                      <div className="space-y-4">
+                        <h4 className="font-medium text-gray-800">Live Preview</h4>
+                        <div className="bg-white border border-gray-200 rounded-lg p-4 h-96 overflow-y-auto">
+                          {customTemplate.content && customTemplate.content.trim() ? (
+                            <div dangerouslySetInnerHTML={{ 
+                              __html: replaceVariables(customTemplate.content)
+                            }} />
+                          ) : (
+                            <div className="text-gray-400 text-center py-8">
+                              <div className="text-4xl mb-2">📝</div>
+                              <p>Start typing to see preview</p>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
@@ -235,5 +440,22 @@ export default function TemplateModal({ isOpen, onClose, onSelectTemplate }) {
         </div>
       </div>
     </div>
-  );
+    );
+  } catch (error) {
+    console.error('Error in TemplateModal:', error);
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+          <h2 className="text-xl font-bold text-red-600 mb-4">Error in Template Modal</h2>
+          <p className="text-gray-700 mb-4">There was an error loading the template modal. Please try again.</p>
+          <button
+            onClick={onClose}
+            className="w-full bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-600"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
 }

@@ -315,6 +315,8 @@ export default function ComposeModal({ onClose, onEmailSent, selectedClient, onC
   }, [showEmojiPicker]);
 
   const handleTemplateSelect = (template) => {
+    console.log('Template selected:', template);
+    
     // Replace template variables with placeholder text
     let processedSubject = template.subject;
     let processedHtml = template.html;
@@ -344,6 +346,13 @@ export default function ComposeModal({ onClose, onEmailSent, selectedClient, onC
       messageHtml: processedHtml
     }));
     setShowTemplateSelector(false);
+    
+    // Focus on the message area after template is applied
+    setTimeout(() => {
+      if (messageRef.current) {
+        messageRef.current.focus();
+      }
+    }, 100);
   };
 
   const handleSend = async () => {

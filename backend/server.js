@@ -616,6 +616,7 @@ app.delete("/api/clients/:id", async (req, res) => {
 app.get("/api/sent-emails", async (req, res) => {
   try {
     const sentEmails = await SentEmail.find().sort({ sentAt: -1 });
+    console.log("📤 Fetched sent emails from MongoDB:", sentEmails.map(e => ({ id: e._id, labels: e.labels })));
     res.json({ success: true, sentEmails });
   } catch (error) {
     console.error("❌ Error fetching sent emails from MongoDB:", error);

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Template Fix Test</title>
+</head>
+<body>
+    <h1>Template Variable Replacement Test</h1>
+    
+    <div id="test1">
+        <h2>Test 1: Basic Replacement</h2>
+        <div id="result1"></div>
+    </div>
+    
+    <div id="test2">
+        <h2>Test 2: Complex HTML</h2>
+        <div id="result2"></div>
+    </div>
+    
+    <div id="test3">
+        <h2>Test 3: Empty Content</h2>
+        <div id="result3"></div>
+    </div>
+    
+    <script>
+        // Test the replaceVariables function
+        function replaceVariables(content) {
+            if (!content || typeof content !== 'string') {
+                return '';
+            }
+            
+            try {
+                return content
+                    .replace(/\{\{recipientName\}\}/g, 'John Doe')
+                    .replace(/\{\{yourName\}\}/g, 'Your Name')
+                    .replace(/\{\{yourTitle\}\}/g, 'Your Title')
+                    .replace(/\{\{companyName\}\}/g, 'Your Company');
+            } catch (error) {
+                console.error('Error replacing variables:', error);
+                return content;
+            }
+        }
+        
+        // Test cases
+        const test1 = 'Hello {{recipientName}}!';
+        const test2 = '<h2>Dear {{recipientName}}</h2><p>I am {{yourName}}, {{yourTitle}} at {{companyName}}.</p>';
+        const test3 = '';
+        
+        document.getElementById('result1').innerHTML = replaceVariables(test1);
+        document.getElementById('result2').innerHTML = replaceVariables(test2);
+        document.getElementById('result3').innerHTML = replaceVariables(test3) || 'Empty content handled correctly';
+        
+        console.log('Test 1:', replaceVariables(test1));
+        console.log('Test 2:', replaceVariables(test2));
+        console.log('Test 3:', replaceVariables(test3));
+    </script>
+</body>
+</html>

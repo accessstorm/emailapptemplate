@@ -22,6 +22,7 @@ function App() {
   const [showTemplates, setShowTemplates] = useState(false);
   const [selectedLabel, setSelectedLabel] = useState(null); // null means show all mails
   const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [backendStatus, setBackendStatus] = useState('checking');
 
   const handleEmailSent = (emailData) => {
     // Refresh sent emails list after sending email
@@ -60,6 +61,7 @@ function App() {
       const response = await fetch('http://localhost:5000/api/sent-emails');
       const data = await response.json();
       if (data.success) {
+        console.log('Fetched sent emails from backend:', data.sentEmails);
         setSentEmails(data.sentEmails);
       }
     } catch (error) {
@@ -143,30 +145,36 @@ function App() {
     fetchDrafts();
     fetchClients();
     fetchSentEmails();
+    checkBackendStatus();
   }, []);
 
   const getCurrentEmails = () => {
     if (currentView === "sent") {
-      let emails = sentEmails.map(email => ({
-        id: email._id,
-        from: "me",
-        to: email.to,
-        subject: email.subject,
-        preview: email.message.substring(0, 50) + "...",
-        time: new Date(email.sentAt).toLocaleTimeString(),
-        date: new Date(email.sentAt).toLocaleDateString(),
-        isRead: true,
-        isStarred: false,
-        attachments: email.attachments || [],
-        fullMessage: email.message,
-        avatar: "M",
-        priority: "normal",
-        cc: email.cc,
-        bcc: email.bcc,
-        messageHtml: email.messageHtml,
-        sentAt: email.sentAt,
-        labels: email.labels || []
-      }));
+      console.log('Raw sentEmails from backend:', sentEmails);
+      let emails = sentEmails.map(email => {
+        const mappedEmail = {
+          id: email._id,
+          from: "me",
+          to: email.to,
+          subject: email.subject,
+          preview: email.message.substring(0, 50) + "...",
+          time: new Date(email.sentAt).toLocaleTimeString(),
+          date: new Date(email.sentAt).toLocaleDateString(),
+          isRead: true,
+          isStarred: false,
+          attachments: email.attachments || [],
+          fullMessage: email.message,
+          avatar: "M",
+          priority: "normal",
+          cc: email.cc,
+          bcc: email.bcc,
+          messageHtml: email.messageHtml,
+          sentAt: email.sentAt,
+          labels: email.labels || []
+        };
+        console.log('Mapped email labels:', mappedEmail.id, mappedEmail.labels);
+        return mappedEmail;
+      });
 
       // Filter by selected label if any
       if (selectedLabel) {
@@ -211,6 +219,20 @@ function App() {
     fetchSentEmails();
   };
 
+  // Check backend status
+  const checkBackendStatus = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/health');
+      if (response.ok) {
+        setBackendStatus('connected');
+      } else {
+        setBackendStatus('error');
+      }
+    } catch (error) {
+      setBackendStatus('disconnected');
+    }
+  };
+
   const handleTemplateClick = () => {
     setShowTemplateModal(true);
   };
@@ -250,6 +272,22 @@ function App() {
           />
         </ErrorBoundary>
         
+        {/* Backend Status Indicator */}
+        {backendStatus === 'disconnected' && (
+          <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 m-4 rounded">
+            <div className="flex">
+              <div className="ml-3">
+                <p className="text-sm font-medium">
+                  ⚠️ Backend Server Not Running
+                </p>
+                <p className="text-sm mt-1">
+                  Please start the backend server: <code className="bg-red-200 px-1 rounded">cd backend && npm start</code>
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Main Content - Just the mailbox */}
         <div className="flex-1 flex flex-col">
           {currentView === "mailbox" && (
@@ -313,11 +351,15 @@ function App() {
         )}
         
         {/* Template Modal */}
-        <TemplateModal
-          isOpen={showTemplateModal}
-          onSelectTemplate={handleTemplateSelect}
-          onClose={() => setShowTemplateModal(false)}
-        />
+        {showTemplateModal && (
+          <ErrorBoundary>
+            <TemplateModal
+              isOpen={showTemplateModal}
+              onSelectTemplate={handleTemplateSelect}
+              onClose={() => setShowTemplateModal(false)}
+            />
+          </ErrorBoundary>
+        )}
         
         {/* Mobile Overlay */}
         {sidebarOpen && (

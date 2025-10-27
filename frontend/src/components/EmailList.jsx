@@ -59,11 +59,19 @@ export default function EmailList({ emails, currentView, setEmails, onEmailSelec
         const data = await response.json();
         console.log('Labels updated successfully:', data);
       } else {
-        const errorData = await response.json();
-        console.error('Failed to update labels:', errorData);
+        if (response.status === 404) {
+          console.error('❌ Backend server not running or endpoint not found. Please start the backend server.');
+          alert('❌ Backend server not running. Please start the backend server with: cd backend && npm start');
+        } else {
+          const errorData = await response.json();
+          console.error('Failed to update labels:', errorData);
+        }
       }
     } catch (error) {
       console.error('Error updating labels:', error);
+      if (error.message.includes('fetch')) {
+        alert('❌ Cannot connect to backend server. Please start the backend server with: cd backend && npm start');
+      }
     }
   };
 
@@ -82,11 +90,15 @@ export default function EmailList({ emails, currentView, setEmails, onEmailSelec
     console.log('Updated emails:', updatedEmails);
     setEmails(updatedEmails);
     
-    // Update in backend
-    const email = emails.find(e => e.id === emailId);
-    const newLabels = email.labels ? [...email.labels, labelId] : [labelId];
-    console.log('New labels for backend:', newLabels);
-    await updateEmailLabels(emailId, newLabels);
+    // Update in backend (with error handling)
+    try {
+      const email = emails.find(e => e.id === emailId);
+      const newLabels = email.labels ? [...email.labels, labelId] : [labelId];
+      console.log('New labels for backend:', newLabels);
+      await updateEmailLabels(emailId, newLabels);
+    } catch (error) {
+      console.log('Backend update failed, but frontend state updated:', error);
+    }
     
     // Refresh sent emails to update sidebar counts
     if (onLabelsUpdated) {
@@ -109,11 +121,15 @@ export default function EmailList({ emails, currentView, setEmails, onEmailSelec
     console.log('Updated emails after removal:', updatedEmails);
     setEmails(updatedEmails);
     
-    // Update in backend
-    const email = emails.find(e => e.id === emailId);
-    const newLabels = email.labels ? email.labels.filter(id => id !== labelId) : [];
-    console.log('New labels for backend after removal:', newLabels);
-    await updateEmailLabels(emailId, newLabels);
+    // Update in backend (with error handling)
+    try {
+      const email = emails.find(e => e.id === emailId);
+      const newLabels = email.labels ? email.labels.filter(id => id !== labelId) : [];
+      console.log('New labels for backend after removal:', newLabels);
+      await updateEmailLabels(emailId, newLabels);
+    } catch (error) {
+      console.log('Backend update failed, but frontend state updated:', error);
+    }
     
     // Refresh sent emails to update sidebar counts
     if (onLabelsUpdated) {
@@ -177,17 +193,32 @@ export default function EmailList({ emails, currentView, setEmails, onEmailSelec
                   </span>
                 )}
               </h2>
-              {selectedLabel && (
+              <div className="flex items-center gap-2">
+                {selectedLabel && (
+                  <button
+                    onClick={() => {
+                      // This will be handled by the parent component
+                      console.log('Clear filter clicked');
+                    }}
+                    className="text-sm text-blue-600 hover:text-blue-800 underline"
+                  >
+                    Clear Filter
+                  </button>
+                )}
                 <button
                   onClick={() => {
-                    // This will be handled by the parent component
-                    console.log('Clear filter clicked');
+                    // Add test labels to all emails
+                    emails.forEach(email => {
+                      if (!email.labels || email.labels.length === 0) {
+                        handleAddLabel(email.id, 'work');
+                      }
+                    });
                   }}
-                  className="text-sm text-blue-600 hover:text-blue-800 underline"
+                  className="text-sm text-green-600 hover:text-green-800 underline"
                 >
-                  Clear Filter
+                  Add Test Labels
                 </button>
-              )}
+              </div>
             </div>
           </div>
         </div>
@@ -250,16 +281,37 @@ export default function EmailList({ emails, currentView, setEmails, onEmailSelec
                     </div>
                     
                     {/* Labels */}
-                    {email.labels && email.labels.length > 0 && (
+                    {console.log('Email labels for', email.id, ':', email.labels)}
+                    {email.labels && email.labels.length > 0 ? (
                       <div className="flex flex-wrap gap-1 mt-2">
                         {email.labels.map(labelId => {
                           const label = labels.find(l => l.id === labelId);
+                          const colorStyles = {
+                            blue: { bg: '#dbeafe', text: '#1e40af' },
+                            green: { bg: '#d1fae5', text: '#065f46' },
+                            red: { bg: '#fee2e2', text: '#991b1b' },
+                            purple: { bg: '#e9d5ff', text: '#6b21a8' }
+                          };
+                          const style = colorStyles[label.color] || { bg: '#f3f4f6', text: '#374151' };
                           return label ? (
-                            <span key={labelId} className={`text-xs px-2 py-1 rounded-full bg-${label.color}-100 text-${label.color}-800`}>
+                            <span 
+                              key={labelId} 
+                              className="text-xs px-2 py-1 rounded-full"
+                              style={{ 
+                                backgroundColor: style.bg, 
+                                color: style.text 
+                              }}
+                            >
                               {label.name}
                             </span>
                           ) : null;
                         })}
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-500">
+                          No labels
+                        </span>
                       </div>
                     )}
                   </div>
@@ -305,7 +357,15 @@ export default function EmailList({ emails, currentView, setEmails, onEmailSelec
                                   email.labels && email.labels.includes(label.id) ? 'bg-gray-50' : ''
                                 }`}
                               >
-                                <div className={`w-3 h-3 rounded-full bg-${label.color}-500`}></div>
+                                <div 
+                                  className="w-3 h-3 rounded-full"
+                                  style={{ 
+                                    backgroundColor: label.color === 'blue' ? '#3b82f6' :
+                                                   label.color === 'green' ? '#10b981' :
+                                                   label.color === 'red' ? '#ef4444' :
+                                                   label.color === 'purple' ? '#8b5cf6' : '#6b7280'
+                                  }}
+                                ></div>
                                 <span>{label.name}</span>
                                 {email.labels && email.labels.includes(label.id) && (
                                   <svg className="w-4 h-4 ml-auto text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">

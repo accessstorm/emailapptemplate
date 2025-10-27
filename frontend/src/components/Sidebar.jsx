@@ -370,7 +370,15 @@ export default function Sidebar({ currentView, setCurrentView, onComposeClick, i
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      <div className={`w-3 h-3 rounded-full bg-${label.color}-500`}></div>
+                      <div 
+                        className="w-3 h-3 rounded-full"
+                        style={{ 
+                          backgroundColor: label.color === 'blue' ? '#3b82f6' :
+                                         label.color === 'green' ? '#10b981' :
+                                         label.color === 'red' ? '#ef4444' :
+                                         label.color === 'purple' ? '#8b5cf6' : '#6b7280'
+                        }}
+                      ></div>
                       <span className="text-sm font-medium">{label.name}</span>
                     </div>
                     <span className="text-xs text-gray-400">{labelCounts[label.id]}</span>

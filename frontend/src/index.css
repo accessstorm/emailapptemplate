@@ -714,6 +714,17 @@ body {
 .text-red-800 { color: #991b1b; }
 .text-purple-800 { color: #6b21a8; }
 
+/* Label Colors - Explicit definitions */
+.bg-blue-100 { background-color: #dbeafe !important; }
+.bg-green-100 { background-color: #d1fae5 !important; }
+.bg-red-100 { background-color: #fee2e2 !important; }
+.bg-purple-100 { background-color: #e9d5ff !important; }
+
+.text-blue-800 { color: #1e40af !important; }
+.text-green-800 { color: #065f46 !important; }
+.text-red-800 { color: #991b1b !important; }
+.text-purple-800 { color: #6b21a8 !important; }
+
 /* Template Modal Styles */
 .template-preview {
   max-height: 400px;
