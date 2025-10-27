@@ -1,5 +1,8 @@
 import React, { useState, useMemo } from 'react';
+import { DndProvider } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
 import { emailTemplates, templateCategories } from '../data/emailTemplates';
+import VisualEditor from './VisualEditor';
 
 export default function TemplateModal({ isOpen, onClose, onSelectTemplate }) {
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -13,6 +16,9 @@ export default function TemplateModal({ isOpen, onClose, onSelectTemplate }) {
   });
   const [userTemplates, setUserTemplates] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [showVisualEditor, setShowVisualEditor] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [visualEditorContent, setVisualEditorContent] = useState('');
 
   // Load user templates from localStorage on component mount
   React.useEffect(() => {
@@ -29,9 +35,28 @@ export default function TemplateModal({ isOpen, onClose, onSelectTemplate }) {
     }
   }, []);
 
+  // Refresh user templates when modal opens
+  React.useEffect(() => {
+    if (isOpen) {
+      const savedTemplates = localStorage.getItem('userEmailTemplates');
+      if (savedTemplates) {
+        try {
+          const parsedTemplates = JSON.parse(savedTemplates);
+          setUserTemplates(parsedTemplates);
+          console.log('Refreshed user templates on modal open:', parsedTemplates);
+        } catch (error) {
+          console.error('Error parsing saved templates:', error);
+        }
+      }
+    }
+  }, [isOpen]);
+
   // Debug custom template changes
   React.useEffect(() => {
     console.log('Custom template updated:', customTemplate);
+    if (customTemplate.content !== undefined) {
+      console.log('Content type:', typeof customTemplate.content, 'Value:', customTemplate.content);
+    }
   }, [customTemplate]);
 
   // Safe variable replacement function
@@ -54,9 +79,19 @@ export default function TemplateModal({ isOpen, onClose, onSelectTemplate }) {
     }
   };
 
+  // Helper function to safely check if content is valid
+  const isValidContent = (content) => {
+    try {
+      return content && typeof content === 'string' && content.trim().length > 0;
+    } catch (error) {
+      console.error('Error checking content validity:', error);
+      return false;
+    }
+  };
+
   // Save template to user templates
   const saveToUserTemplates = async () => {
-    if (!customTemplate.name || !customTemplate.subject || !customTemplate.content || !customTemplate.content.trim()) {
+    if (!customTemplate.name || !customTemplate.subject || !isValidContent(customTemplate.content)) {
       alert('Please fill in all required fields before saving');
       return;
     }
@@ -67,7 +102,7 @@ export default function TemplateModal({ isOpen, onClose, onSelectTemplate }) {
         id: `user_${Date.now()}`,
         name: customTemplate.name.trim(),
         subject: customTemplate.subject.trim(),
-        html: customTemplate.content.trim(),
+        html: customTemplate.content ? String(customTemplate.content).trim() : '',
         category: 'Your Templates',
         description: 'Your custom template',
         variables: ['recipientName', 'yourName', 'yourTitle', 'companyName'],
@@ -134,12 +169,12 @@ export default function TemplateModal({ isOpen, onClose, onSelectTemplate }) {
       if (selectedTemplate) {
         onSelectTemplate(selectedTemplate);
         onClose();
-      } else if (customTemplate.name && customTemplate.subject && customTemplate.content && customTemplate.content.trim()) {
+      } else if (customTemplate.name && customTemplate.subject && isValidContent(customTemplate.content)) {
         const customTemplateData = {
           id: 'custom',
           name: customTemplate.name.trim(),
           subject: customTemplate.subject.trim(),
-          html: customTemplate.content.trim(),
+          html: customTemplate.content ? String(customTemplate.content).trim() : '',
           variables: ['recipientName', 'yourName', 'yourTitle', 'companyName']
         };
         onSelectTemplate(customTemplateData);
@@ -153,10 +188,48 @@ export default function TemplateModal({ isOpen, onClose, onSelectTemplate }) {
     }
   };
 
+  const handleVisualEditorSave = (data) => {
+    console.log('Visual editor save data:', data);
+    
+    // If a template was saved, refresh the user templates list
+    if (data.template) {
+      // Reload user templates from localStorage
+      const savedTemplates = localStorage.getItem('userEmailTemplates');
+      if (savedTemplates) {
+        try {
+          const parsedTemplates = JSON.parse(savedTemplates);
+          setUserTemplates(parsedTemplates);
+          console.log('Refreshed user templates:', parsedTemplates);
+        } catch (error) {
+          console.error('Error parsing saved templates:', error);
+        }
+      }
+    }
+    
+    setCustomTemplate(prev => ({
+      ...prev,
+      content: data.html
+    }));
+    setVisualEditorContent(data.content);
+    setShowVisualEditor(false);
+    console.log('Updated custom template:', { ...customTemplate, content: data.html });
+  };
+
+  const handleVisualEditorClose = () => {
+    setShowVisualEditor(false);
+    setIsFullscreen(false);
+  };
+
+  const handleToggleFullscreen = () => {
+    setIsFullscreen(!isFullscreen);
+  };
+
   const handleClose = () => {
     setSelectedTemplate(null);
     setShowPreview(false);
     setCustomTemplate({ name: '', subject: '', content: '', title: '' });
+    setShowVisualEditor(false);
+    setIsFullscreen(false);
     onClose();
   };
 
@@ -284,11 +357,11 @@ export default function TemplateModal({ isOpen, onClose, onSelectTemplate }) {
                     <button
                       onClick={handleApplyTemplate}
                       className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-                        selectedTemplate || (customTemplate.name && customTemplate.subject && customTemplate.content && customTemplate.content.trim())
+                        selectedTemplate || (customTemplate.name && customTemplate.subject && isValidContent(customTemplate.content))
                           ? 'bg-blue-500 text-white hover:bg-blue-600'
                           : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                       }`}
-                      disabled={!selectedTemplate && (!customTemplate.name || !customTemplate.subject || !customTemplate.content || !customTemplate.content.trim())}
+                      disabled={!selectedTemplate && (!customTemplate.name || !customTemplate.subject || !isValidContent(customTemplate.content))}
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -377,13 +450,26 @@ export default function TemplateModal({ isOpen, onClose, onSelectTemplate }) {
                           </ul>
                         </div>
                         
-                        {/* Save to Your Templates Button */}
-                        <div className="flex gap-2">
+                        {/* Visual Editor and Save Buttons */}
+                        <div className="space-y-2">
+                          <button
+                            onClick={() => {
+                              console.log('Opening visual editor...');
+                              setShowVisualEditor(true);
+                            }}
+                            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4h4a2 2 0 002-2V5z" />
+                            </svg>
+                            Open Visual Editor
+                          </button>
+                          
                           <button
                             onClick={saveToUserTemplates}
-                            disabled={isSaving || !customTemplate.name || !customTemplate.subject || !customTemplate.content || !customTemplate.content.trim()}
-                            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-                              isSaving || !customTemplate.name || !customTemplate.subject || !customTemplate.content || !customTemplate.content.trim()
+                            disabled={isSaving || !customTemplate.name || !customTemplate.subject || !isValidContent(customTemplate.content)}
+                            className={`w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+                              isSaving || !customTemplate.name || !customTemplate.subject || !isValidContent(customTemplate.content)
                                 ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                                 : 'bg-green-500 text-white hover:bg-green-600'
                             }`}
@@ -411,7 +497,7 @@ export default function TemplateModal({ isOpen, onClose, onSelectTemplate }) {
                       <div className="space-y-4">
                         <h4 className="font-medium text-gray-800">Live Preview</h4>
                         <div className="bg-white border border-gray-200 rounded-lg p-4 h-96 overflow-y-auto">
-                          {customTemplate.content && customTemplate.content.trim() ? (
+                          {customTemplate.content && typeof customTemplate.content === 'string' && customTemplate.content.trim() ? (
                             <div dangerouslySetInnerHTML={{ 
                               __html: replaceVariables(customTemplate.content)
                             }} />
@@ -439,6 +525,32 @@ export default function TemplateModal({ isOpen, onClose, onSelectTemplate }) {
           </div>
         </div>
       </div>
+      
+      {/* Visual Editor Modal */}
+      {showVisualEditor && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+          <div className={`bg-white rounded-xl shadow-2xl w-full ${isFullscreen ? 'h-full' : 'max-w-7xl max-h-[90vh]'}`}>
+            <DndProvider backend={HTML5Backend}>
+              <VisualEditor
+                initialContent={visualEditorContent}
+                onSave={handleVisualEditorSave}
+                onClose={handleVisualEditorClose}
+                isFullscreen={isFullscreen}
+                onToggleFullscreen={handleToggleFullscreen}
+                templateName={customTemplate.name}
+                templateSubject={customTemplate.subject}
+              />
+            </DndProvider>
+          </div>
+        </div>
+      )}
+      
+      {/* Debug info */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="fixed bottom-4 right-4 bg-black text-white p-2 rounded text-xs">
+          showVisualEditor: {showVisualEditor ? 'true' : 'false'}
+        </div>
+      )}
     </div>
     );
   } catch (error) {
