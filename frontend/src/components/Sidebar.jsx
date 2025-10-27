@@ -1,7 +1,28 @@
 import { useState } from "react";
 
-export default function Sidebar({ currentView, setCurrentView, onComposeClick, isOpen, onClose, clients, onClientSelect, onAddClient, drafts, onDraftSelect, onDeleteDraft, sentEmails }) {
+export default function Sidebar({ currentView, setCurrentView, onComposeClick, isOpen, onClose, clients, onClientSelect, onAddClient, drafts, onDraftSelect, onDeleteDraft, sentEmails, selectedLabel, onLabelFilter, onTemplateClick }) {
   const [openSection, setOpenSection] = useState(null);
+
+  const labels = [
+    { id: "work", name: "Work", color: "blue" },
+    { id: "personal", name: "Personal", color: "green" },
+    { id: "important", name: "Important", color: "red" },
+    { id: "newsletters", name: "Newsletters", color: "purple" },
+  ];
+
+  // Count emails for each label
+  const getLabelCounts = () => {
+    const counts = {};
+    labels.forEach(label => {
+      counts[label.id] = sentEmails.filter(email => 
+        email.labels && email.labels.includes(label.id)
+      ).length;
+    });
+    console.log('Label counts:', counts, 'for emails:', sentEmails.length);
+    return counts;
+  };
+
+  const labelCounts = getLabelCounts();
 
   const navigationItems = [
     { 
@@ -14,12 +35,6 @@ export default function Sidebar({ currentView, setCurrentView, onComposeClick, i
     }
   ];
 
-  const labels = [
-    { name: "Work", color: "blue", count: 12 },
-    { name: "Personal", color: "green", count: 8 },
-    { name: "Important", color: "red", count: 5 },
-    { name: "Newsletters", color: "purple", count: 15 },
-  ];
 
   const getPriorityColor = (priority) => {
     const colors = {
@@ -77,37 +92,77 @@ export default function Sidebar({ currentView, setCurrentView, onComposeClick, i
 
         {/* Navigation */}
         <nav className="flex-1 px-4 space-y-1">
-          {navigationItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => {
-                setCurrentView(item.id);
-                onClose();
-              }}
-              className={`modern-nav-item ${currentView === item.id ? 'active' : ''} group`}
-              title={item.description}
-            >
-              <div className="flex items-center gap-3 flex-1">
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-semibold ${
-                  currentView === item.id 
-                    ? 'bg-white shadow-md' 
-                    : 'bg-gray-100 group-hover:bg-white'
-                }`}>
-                  {item.icon}
-                </div>
-                <div className="flex-1 text-left">
-                  <div className="font-medium">{item.label}</div>
-                  <div className="text-xs text-gray-500">{item.description}</div>
+          {/* Sent Messages */}
+          <button
+            onClick={() => {
+              setCurrentView("sent");
+              onClose();
+            }}
+            className={`w-full flex items-center justify-between p-3 rounded-lg transition-colors ${
+              currentView === "sent" 
+                ? 'bg-blue-50 border border-blue-200' 
+                : 'hover:bg-gray-50'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-semibold ${
+                currentView === "sent" 
+                  ? 'bg-blue-500 text-white' 
+                  : 'bg-green-100 text-green-600'
+              }`}>
+                📤
+              </div>
+              <div className="text-left">
+                <div className="font-semibold text-gray-800">Sent Messages</div>
+                <div className="text-xs text-gray-500">
+                  {sentEmails && sentEmails.length > 0 
+                    ? `${sentEmails.length} messages sent`
+                    : 'No messages sent yet'
+                  }
                 </div>
               </div>
-              {item.count && (
-                <span className={`modern-badge ${currentView === item.id ? 'bg-white text-blue-600' : 'secondary'}`}>
-                  {item.count}
-                </span>
-              )}
-            </button>
-          ))}
+            </div>
+            {sentEmails && sentEmails.length > 0 && (
+              <div className="text-right">
+                <div className="text-xs text-gray-500">
+                  Latest: {new Date(sentEmails[0].sentAt).toLocaleDateString()}
+                </div>
+              </div>
+            )}
+          </button>
+
+          {/* Mail Templates */}
+          <button
+            onClick={() => {
+              if (onTemplateClick) {
+                onTemplateClick();
+              } else {
+                setCurrentView("templates");
+              }
+              onClose();
+            }}
+            className={`w-full flex items-center justify-between p-3 rounded-lg transition-colors ${
+              currentView === "templates" 
+                ? 'bg-purple-50 border border-purple-200' 
+                : 'hover:bg-gray-50'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-semibold ${
+                currentView === "templates" 
+                  ? 'bg-purple-500 text-white' 
+                  : 'bg-purple-100 text-purple-600'
+              }`}>
+                📝
+              </div>
+              <div className="text-left">
+                <div className="font-semibold text-gray-800">Mail Templates</div>
+                <div className="text-xs text-gray-500">Pre-written templates</div>
+              </div>
+            </div>
+          </button>
         </nav>
+
 
         {/* Drafts Section */}
         <div className="border-t border-gray-200">
@@ -287,16 +342,38 @@ export default function Sidebar({ currentView, setCurrentView, onComposeClick, i
           }`}>
             <div className="px-4 pb-4">
               <div className="space-y-1">
-                {labels.map((label, index) => (
+                {/* All Emails */}
+                <button
+                  onClick={() => onLabelFilter(null)}
+                  className={`w-full flex items-center justify-between px-2 py-1.5 text-sm rounded-lg transition-colors ${
+                    selectedLabel === null 
+                      ? 'bg-blue-50 text-blue-700 border border-blue-200' 
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-gray-500"></div>
+                    <span className="text-sm font-medium">All Mails</span>
+                  </div>
+                  <span className="text-xs text-gray-400">{sentEmails.length}</span>
+                </button>
+
+                {/* Individual Labels */}
+                {labels.map((label) => (
                   <button
-                    key={index}
-                    className="w-full flex items-center justify-between px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                    key={label.id}
+                    onClick={() => onLabelFilter(label.id)}
+                    className={`w-full flex items-center justify-between px-2 py-1.5 text-sm rounded-lg transition-colors ${
+                      selectedLabel === label.id 
+                        ? 'bg-blue-50 text-blue-700 border border-blue-200' 
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
                   >
                     <div className="flex items-center gap-2">
                       <div className={`w-3 h-3 rounded-full bg-${label.color}-500`}></div>
-                      <span className="text-sm">{label.name}</span>
+                      <span className="text-sm font-medium">{label.name}</span>
                     </div>
-                    <span className="text-xs text-gray-400">{label.count}</span>
+                    <span className="text-xs text-gray-400">{labelCounts[label.id]}</span>
                   </button>
                 ))}
               </div>

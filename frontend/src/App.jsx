@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from "react";
 import ComposeModal from "./components/ComposeModal";
 import Sidebar from "./components/Sidebar";
-import Header from "./components/Header";
 import EmailList from "./components/EmailList";
+import EmailDetail from "./components/EmailDetail";
+import TemplateModal from "./components/TemplateModal";
 import AddClientModal from "./components/AddClientModal";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 function App() {
-  const [currentView, setCurrentView] = useState("sent");
+  const [currentView, setCurrentView] = useState("mailbox");
   const [showCompose, setShowCompose] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sentEmails, setSentEmails] = useState([]);
@@ -16,6 +18,10 @@ function App() {
   const [drafts, setDrafts] = useState([]);
   const [currentDraft, setCurrentDraft] = useState(null);
   const [emails, setEmails] = useState([]);
+  const [selectedEmail, setSelectedEmail] = useState(null);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [selectedLabel, setSelectedLabel] = useState(null); // null means show all mails
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
 
   const handleEmailSent = (emailData) => {
     // Refresh sent emails list after sending email
@@ -141,7 +147,7 @@ function App() {
 
   const getCurrentEmails = () => {
     if (currentView === "sent") {
-      return sentEmails.map(email => ({
+      let emails = sentEmails.map(email => ({
         id: email._id,
         from: "me",
         to: email.to,
@@ -157,82 +163,171 @@ function App() {
         priority: "normal",
         cc: email.cc,
         bcc: email.bcc,
-        messageHtml: email.messageHtml
+        messageHtml: email.messageHtml,
+        sentAt: email.sentAt,
+        labels: email.labels || []
       }));
+
+      // Filter by selected label if any
+      if (selectedLabel) {
+        console.log('Filtering emails by label:', selectedLabel);
+        console.log('All emails before filtering:', emails.map(e => ({ id: e.id, labels: e.labels })));
+        emails = emails.filter(email => email.labels && email.labels.includes(selectedLabel));
+        console.log('Filtered emails:', emails.map(e => ({ id: e.id, labels: e.labels })));
+      } else {
+        console.log('Showing all emails (no label filter)');
+      }
+
+      return emails;
     }
-    // For inbox view, return empty array (no dummy emails)
+    // For mailbox view, return empty array (no dummy emails)
     return [];
   };
 
+  const handleEmailSelect = (email) => {
+    setSelectedEmail(email);
+    setCurrentView("email-detail");
+  };
+
+  const handleBackToMails = () => {
+    setSelectedEmail(null);
+    setCurrentView("sent");
+  };
+
+  const handleLabelFilter = (labelId) => {
+    console.log('Label filter clicked:', labelId, 'Current selectedLabel:', selectedLabel);
+    if (selectedLabel === labelId) {
+      console.log('Clearing label filter');
+      setSelectedLabel(null); // Clear filter
+    } else {
+      console.log('Setting label filter to:', labelId);
+      setSelectedLabel(labelId);
+    }
+    setCurrentView("sent");
+  };
+
+  // Refresh sent emails when labels might have changed
+  const refreshSentEmails = () => {
+    fetchSentEmails();
+  };
+
+  const handleTemplateClick = () => {
+    setShowTemplateModal(true);
+  };
+
+  const handleTemplateSelect = (template) => {
+    // This will be handled by the compose modal when it's opened
+    setShowTemplateModal(false);
+    // You could also open the compose modal with the template pre-filled
+    // setShowComposeModal(true);
+  };
+
   return (
-    <div className="min-h-screen gradient-bg">
-      {/* Sidebar */}
-      <Sidebar 
-        currentView={currentView} 
-        setCurrentView={setCurrentView}
-        onComposeClick={() => {
-          setCurrentDraft(null);
-          setSelectedClient(null);
-          setShowCompose(true);
-        }}
-        isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        clients={clients}
-        onClientSelect={handleClientSelect}
-        onAddClient={() => setShowAddClientModal(true)}
-        drafts={drafts}
-        onDraftSelect={handleDraftSelect}
-        onDeleteDraft={deleteDraft}
-        sentEmails={sentEmails}
-      />
-      
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col">
-        {/* Header */}
-        <Header 
-          onMenuClick={() => setSidebarOpen(!sidebarOpen)}
-          sidebarOpen={sidebarOpen}
+    <ErrorBoundary>
+      <div className="min-h-screen gradient-bg">
+        {/* Sidebar */}
+        <ErrorBoundary title="Sidebar Error" message="There was an error loading the sidebar. Please try refreshing the page.">
+          <Sidebar 
+            currentView={currentView} 
+            setCurrentView={setCurrentView}
+            onComposeClick={() => {
+              setCurrentDraft(null);
+              setSelectedClient(null);
+              setShowCompose(true);
+            }}
+            isOpen={sidebarOpen}
+            onClose={() => setSidebarOpen(false)}
+            clients={clients}
+            onClientSelect={handleClientSelect}
+            onAddClient={() => setShowAddClientModal(true)}
+            drafts={drafts}
+            onDraftSelect={handleDraftSelect}
+            onDeleteDraft={deleteDraft}
+            sentEmails={sentEmails}
+            selectedLabel={selectedLabel}
+            onLabelFilter={handleLabelFilter}
+            onTemplateClick={handleTemplateClick}
+          />
+        </ErrorBoundary>
+        
+        {/* Main Content - Just the mailbox */}
+        <div className="flex-1 flex flex-col">
+          {currentView === "mailbox" && (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center">
+                <div className="text-6xl mb-4">📧</div>
+                <h2 className="text-2xl font-bold text-gray-700 mb-2">Welcome to MailBox</h2>
+                <p className="text-gray-500">Click on "Sent Messages" in the sidebar to view your emails</p>
+              </div>
+            </div>
+          )}
+          
+          {currentView === "sent" && (
+            <ErrorBoundary title="Email List Error" message="There was an error loading the email list. Please try refreshing the page.">
+            <EmailList
+              emails={getCurrentEmails()}
+              currentView={currentView}
+              setEmails={setEmails}
+              onEmailSelect={handleEmailSelect}
+              onLabelsUpdated={refreshSentEmails}
+              selectedLabel={selectedLabel}
+            />
+            </ErrorBoundary>
+          )}
+          
+          {currentView === "email-detail" && selectedEmail && (
+            <ErrorBoundary title="Email Detail Error" message="There was an error loading the email details.">
+              <EmailDetail 
+                email={selectedEmail}
+                onBack={handleBackToMails}
+              />
+            </ErrorBoundary>
+          )}
+        </div>
+        
+        {/* Compose Modal */}
+        {showCompose && (
+          <ErrorBoundary title="Compose Error" message="There was an error with the compose modal. Please try again.">
+            <ComposeModal 
+              onClose={() => setShowCompose(false)} 
+              onEmailSent={handleEmailSent}
+              selectedClient={selectedClient}
+              onClientCleared={() => setSelectedClient(null)}
+              currentDraft={currentDraft}
+              onDraftCleared={() => setCurrentDraft(null)}
+              onSaveDraft={saveDraft}
+              onUpdateDraft={updateDraft}
+            />
+          </ErrorBoundary>
+        )}
+
+        {/* Add Client Modal */}
+        {showAddClientModal && (
+          <ErrorBoundary title="Add Client Error" message="There was an error with the add client modal.">
+            <AddClientModal
+              isOpen={showAddClientModal}
+              onClose={() => setShowAddClientModal(false)}
+              onClientAdded={handleAddClient}
+            />
+          </ErrorBoundary>
+        )}
+        
+        {/* Template Modal */}
+        <TemplateModal
+          isOpen={showTemplateModal}
+          onSelectTemplate={handleTemplateSelect}
+          onClose={() => setShowTemplateModal(false)}
         />
         
-        {/* Email List */}
-        <EmailList 
-          emails={getCurrentEmails()} 
-          currentView={currentView}
-          setEmails={setEmails}
-        />
+        {/* Mobile Overlay */}
+        {sidebarOpen && (
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50 z-30 lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
       </div>
-      
-      {/* Compose Modal */}
-      {showCompose && (
-        <ComposeModal 
-          onClose={() => setShowCompose(false)} 
-          onEmailSent={handleEmailSent}
-          selectedClient={selectedClient}
-          onClientCleared={() => setSelectedClient(null)}
-          currentDraft={currentDraft}
-          onDraftCleared={() => setCurrentDraft(null)}
-          onSaveDraft={saveDraft}
-          onUpdateDraft={updateDraft}
-        />
-      )}
-
-      {/* Add Client Modal */}
-      {showAddClientModal && (
-        <AddClientModal
-          isOpen={showAddClientModal}
-          onClose={() => setShowAddClientModal(false)}
-          onClientAdded={handleAddClient}
-        />
-      )}
-      
-      {/* Mobile Overlay */}
-      {sidebarOpen && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-30 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-    </div>
+    </ErrorBoundary>
   );
 }
 

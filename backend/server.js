@@ -82,11 +82,40 @@ const sentEmailSchema = new mongoose.Schema({
     data: Buffer, // Store file data in MongoDB
     contentType: String
   }],
+  labels: [{ type: String }], // Array of label IDs
   sentAt: { type: Date, default: Date.now },
   status: { type: String, default: 'sent' }
 });
 
 const SentEmail = mongoose.model('SentEmail', sentEmailSchema);
+
+// Create indexes for better performance
+const createIndexes = async () => {
+  try {
+    await Draft.createIndexes([
+      { userId: 1, lastModified: -1 },
+      { status: 1, lastModified: -1 }
+    ]);
+    
+    await Client.createIndexes([
+      { email: 1 },
+      { createdAt: -1 }
+    ]);
+    
+    await SentEmail.createIndexes([
+      { sentAt: -1 },
+      { to: 1 },
+      { status: 1 }
+    ]);
+    
+    console.log('✅ Database indexes created successfully');
+  } catch (error) {
+    console.error('❌ Error creating indexes:', error);
+  }
+};
+
+// Create indexes after connection
+mongoose.connection.once('open', createIndexes);
 
 // Fallback in-memory storage for drafts when MongoDB is not available
 let inMemoryDrafts = [];
@@ -99,6 +128,41 @@ let clientIdCounter = 1;
 // Fallback in-memory storage for sent emails when MongoDB is not available
 let inMemorySentEmails = [];
 let sentEmailIdCounter = 1;
+
+// Rate limiting
+const rateLimiter = new Map();
+const RATE_LIMIT = 10; // emails per minute
+const RATE_WINDOW = 60 * 1000; // 1 minute
+
+const checkRateLimit = (userId) => {
+  const now = Date.now();
+  const userRequests = rateLimiter.get(userId) || [];
+  const recentRequests = userRequests.filter(time => now - time < RATE_WINDOW);
+  
+  if (recentRequests.length >= RATE_LIMIT) {
+    throw new Error('Rate limit exceeded. Please wait before sending more emails.');
+  }
+  
+  recentRequests.push(now);
+  rateLimiter.set(userId, recentRequests);
+};
+
+// Data cleanup function
+const cleanupOldDrafts = async () => {
+  try {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const result = await Draft.deleteMany({ 
+      lastModified: { $lt: thirtyDaysAgo },
+      status: 'draft' 
+    });
+    console.log(`🧹 Cleaned up ${result.deletedCount} old drafts`);
+  } catch (error) {
+    console.error('❌ Error cleaning up old drafts:', error);
+  }
+};
+
+// Run cleanup every 24 hours
+setInterval(cleanupOldDrafts, 24 * 60 * 60 * 1000);
 
 // Health check endpoint
 app.get("/api/health", (req, res) => {
@@ -124,6 +188,17 @@ app.post("/api/send-email", upload.array('attachments'), async (req, res) => {
   }
   
   const { to, cc, bcc, subject, message, messageHtml, draftId } = req.body;
+  const userId = 'default-user'; // In a real app, this would come from authentication
+
+  // Check rate limit
+  try {
+    checkRateLimit(userId);
+  } catch (error) {
+    return res.status(429).json({
+      success: false,
+      message: error.message
+    });
+  }
 
   // Validate required fields
   if (!to || !subject || !message) {
@@ -589,6 +664,29 @@ app.delete("/api/sent-emails/:id", async (req, res) => {
     
     inMemorySentEmails.splice(sentEmailIndex, 1);
     res.json({ success: true, message: "Sent email deleted successfully" });
+  }
+});
+
+// Update email labels
+app.put("/api/sent-emails/:id/labels", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { labels } = req.body;
+    
+    const sentEmail = await SentEmail.findByIdAndUpdate(
+      id,
+      { labels: labels || [] },
+      { new: true }
+    );
+    
+    if (!sentEmail) {
+      return res.status(404).json({ success: false, message: "Sent email not found" });
+    }
+    
+    res.json({ success: true, sentEmail });
+  } catch (error) {
+    console.error("❌ Error updating email labels:", error);
+    res.status(500).json({ success: false, message: "Failed to update labels" });
   }
 });
 
