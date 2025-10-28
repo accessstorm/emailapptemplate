@@ -1,5 +1,11 @@
 // Utility functions for Visual Editor template processing
 
+// Determine a public base URL for links embedded in emails.
+// Uses Vite env var if available; falls back to localhost for dev.
+const PUBLIC_BASE_URL = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_PUBLIC_BASE_URL)
+  ? String(import.meta.env.VITE_PUBLIC_BASE_URL).replace(/\/$/, '')
+  : 'http://localhost:5000';
+
 export const generateHTML = (comps) => {
   if (comps.length === 0) return '';
   
@@ -127,7 +133,7 @@ export const generateHTML = (comps) => {
       case 'contact-form':
         // Generate a unique form ID for tracking submissions
         const formId = comp.id || `form_${Date.now()}`;
-        const backendUrl = 'http://localhost:5000'; // Backend URL
+        const backendUrl = PUBLIC_BASE_URL; // Public backend URL
         
         const formFields = Array.isArray(props.fields) ? props.fields.map((field, index) => {
           const fieldName = field.toLowerCase().replace(/\s+/g, '_');

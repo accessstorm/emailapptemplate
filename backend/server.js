@@ -784,9 +784,12 @@ app.post("/api/media/upload", (req, res) => {
           message: "No file uploaded" 
         });
       }
-
       // Generate public URL
-      const publicUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+      // Prefer an explicit PUBLIC_BASE_URL for externally accessible links (e.g. https://your-domain.com)
+      const configuredBase = process.env.PUBLIC_BASE_URL && process.env.PUBLIC_BASE_URL.trim().replace(/\/$/, '');
+      const runtimeBase = `${req.protocol}://${req.get("host")}`;
+      const baseUrl = configuredBase || runtimeBase;
+      const publicUrl = `${baseUrl}/uploads/${req.file.filename}`;
       
       console.log("📁 Media uploaded successfully:", {
         filename: req.file.filename,
