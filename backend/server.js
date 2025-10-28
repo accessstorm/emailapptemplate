@@ -4,6 +4,7 @@ import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 import multer from "multer";
 import path from "path";
+import fs from "fs";
 import mongoose from "mongoose";
 
 dotenv.config();
@@ -21,6 +22,40 @@ const upload = multer({
   fileFilter: (req, file, cb) => {
     // Allow all file types for now, but you can restrict if needed
     cb(null, true);
+  }
+});
+
+// Configure multer for media uploads (images/videos) - use disk storage for public access
+const mediaStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(process.cwd(), "uploads");
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    cb(null, "uploads");
+  },
+  filename: (req, file, cb) => {
+    const timestamp = Date.now();
+    const ext = path.extname(file.originalname) || "";
+    const safeName = path.basename(file.originalname, ext)
+      .replace(/[^a-z0-9_\-]/gi, "_")
+      .toLowerCase();
+    cb(null, `${timestamp}-${safeName}${ext}`);
+  }
+});
+
+const mediaUpload = multer({
+  storage: mediaStorage,
+  limits: { 
+    fileSize: 20 * 1024 * 1024 // 20MB limit for media files
+  },
+  fileFilter: (req, file, cb) => {
+    const isImageOrVideo = /^(image|video)\//.test(file.mimetype);
+    if (isImageOrVideo) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only images and videos are allowed"), false);
+    }
   }
 });
 
@@ -174,6 +209,15 @@ app.get("/api/health", (req, res) => {
     emailUser: process.env.EMAIL_USER ? "Set" : "Missing",
     emailPass: process.env.EMAIL_PASS ? "Set" : "Missing",
     instructions: emailConfigured ? "Email is configured" : "Please set EMAIL_USER and EMAIL_PASS in .env file"
+  });
+});
+
+// Test endpoint for media upload
+app.get("/api/media/test", (req, res) => {
+  res.json({ 
+    success: true, 
+    message: "Media upload endpoint is working",
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -715,6 +759,254 @@ app.get("/api/attachments/:emailId/:attachmentIndex", async (req, res) => {
   } catch (error) {
     console.error("❌ Error serving attachment:", error);
     res.status(500).json({ success: false, message: "Error serving attachment" });
+  }
+});
+
+// Media upload endpoint for Visual Editor (images/videos)
+app.post("/api/media/upload", (req, res) => {
+  console.log("📁 Media upload request received");
+  
+  mediaUpload.single("file")(req, res, async (err) => {
+    try {
+      // Handle multer errors
+      if (err) {
+        console.error("❌ Multer error:", err);
+        return res.status(400).json({
+          success: false,
+          message: err.message || "File upload error"
+        });
+      }
+      
+      if (!req.file) {
+        console.log("❌ No file uploaded");
+        return res.status(400).json({ 
+          success: false, 
+          message: "No file uploaded" 
+        });
+      }
+
+      // Generate public URL
+      const publicUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+      
+      console.log("📁 Media uploaded successfully:", {
+        filename: req.file.filename,
+        originalName: req.file.originalname,
+        mimetype: req.file.mimetype,
+        size: req.file.size,
+        url: publicUrl
+      });
+
+      res.json({ 
+        success: true, 
+        url: publicUrl,
+        mimetype: req.file.mimetype,
+        name: req.file.originalname,
+        size: req.file.size,
+        filename: req.file.filename
+      });
+    } catch (error) {
+      console.error("❌ Media upload error:", error);
+      res.status(500).json({ 
+        success: false, 
+        message: error.message || "Upload failed" 
+      });
+    }
+  });
+});
+
+// Form Submission Schema - to store responses from email forms
+const formSubmissionSchema = new mongoose.Schema({
+  formId: { type: String, required: true },
+  submittedAt: { type: Date, default: Date.now },
+  data: { type: mongoose.Schema.Types.Mixed, required: true }, // Flexible field for any form data
+  submitterEmail: { type: String },
+  submitterName: { type: String },
+  ipAddress: { type: String },
+  userAgent: { type: String }
+});
+
+const FormSubmission = mongoose.model('FormSubmission', formSubmissionSchema);
+
+// API endpoint to handle form submissions from emails
+app.post("/api/form-submission", express.urlencoded({ extended: true }), async (req, res) => {
+  try {
+    console.log("📝 Form submission received:", req.body);
+    
+    const { formId, ...formData } = req.body;
+    
+    // Extract email and name if present
+    const submitterEmail = formData.email || formData.your_email || '';
+    const submitterName = formData.name || formData.your_name || '';
+    
+    // Get IP and User Agent
+    const ipAddress = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+    const userAgent = req.headers['user-agent'];
+    
+    // Check if MongoDB is available
+    if (mongoose.connection.readyState === 1) {
+      // Save to MongoDB
+      const submission = new FormSubmission({
+        formId,
+        data: formData,
+        submitterEmail,
+        submitterName,
+        ipAddress,
+        userAgent
+      });
+      
+      await submission.save();
+      console.log("✅ Form submission saved to database");
+    } else {
+      // Fallback: just log it
+      console.log("⚠️ MongoDB not available, logging submission:");
+      console.log(JSON.stringify({ formId, formData, submitterEmail, submitterName }, null, 2));
+    }
+    
+    // Send a success response (HTML page)
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Thank You</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          }
+          .container {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            text-align: center;
+            max-width: 500px;
+          }
+          .success-icon {
+            font-size: 64px;
+            color: #28a745;
+            margin-bottom: 20px;
+          }
+          h1 {
+            color: #333;
+            margin-bottom: 10px;
+          }
+          p {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 30px;
+          }
+          .btn {
+            display: inline-block;
+            padding: 12px 30px;
+            background-color: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: bold;
+            transition: background-color 0.3s;
+          }
+          .btn:hover {
+            background-color: #5568d3;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="success-icon">✓</div>
+          <h1>Thank You!</h1>
+          <p>Your response has been submitted successfully. We'll get back to you soon.</p>
+          <a href="javascript:window.close()" class="btn">Close Window</a>
+        </div>
+      </body>
+      </html>
+    `);
+    
+  } catch (error) {
+    console.error("❌ Error handling form submission:", error);
+    res.status(500).send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Error</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background: #f4f4f4;
+          }
+          .container {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 500px;
+          }
+          .error-icon {
+            font-size: 64px;
+            color: #dc3545;
+            margin-bottom: 20px;
+          }
+          h1 {
+            color: #333;
+            margin-bottom: 10px;
+          }
+          p {
+            color: #666;
+            line-height: 1.6;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="error-icon">✕</div>
+          <h1>Oops!</h1>
+          <p>There was an error submitting your response. Please try again later.</p>
+        </div>
+      </body>
+      </html>
+    `);
+  }
+});
+
+// API endpoint to get form submissions (for viewing responses)
+app.get("/api/form-submissions", async (req, res) => {
+  try {
+    const { formId } = req.query;
+    
+    if (mongoose.connection.readyState === 1) {
+      const query = formId ? { formId } : {};
+      const submissions = await FormSubmission.find(query).sort({ submittedAt: -1 });
+      
+      res.json({ 
+        success: true, 
+        submissions,
+        count: submissions.length
+      });
+    } else {
+      res.status(503).json({ 
+        success: false, 
+        message: "Database not available" 
+      });
+    }
+  } catch (error) {
+    console.error("❌ Error fetching form submissions:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Error fetching form submissions" 
+    });
   }
 });
 

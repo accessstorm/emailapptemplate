@@ -161,6 +161,33 @@ export default function Sidebar({ currentView, setCurrentView, onComposeClick, i
               </div>
             </div>
           </button>
+
+          {/* Form Responses */}
+          <button
+            onClick={() => {
+              setCurrentView("form-responses");
+              onClose();
+            }}
+            className={`w-full flex items-center justify-between p-3 rounded-lg transition-colors ${
+              currentView === "form-responses" 
+                ? 'bg-green-50 border border-green-200' 
+                : 'hover:bg-gray-50'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-semibold ${
+                currentView === "form-responses" 
+                  ? 'bg-green-500 text-white' 
+                  : 'bg-green-100 text-green-600'
+              }`}>
+                📋
+              </div>
+              <div className="text-left">
+                <div className="font-semibold text-gray-800">Form Responses</div>
+                <div className="text-xs text-gray-500">View submitted forms</div>
+              </div>
+            </div>
+          </button>
         </nav>
 
 

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
+import { generateHTML } from '../utils/visualEditorUtils';
 
 // Component Library - 20 premade components
 const COMPONENT_LIBRARY = [
@@ -167,19 +168,89 @@ const COMPONENT_LIBRARY = [
     name: 'Video',
     type: 'media',
     icon: '🎥',
-    defaultProps: { src: '', poster: 'https://via.placeholder.com/400x300', width: '100%' },
-    component: ({ src, poster, width, height = '300px' }) => (
-      <div style={{ margin: '20px 0' }}>
-        <video 
-          src={src} 
-          poster={poster} 
-          controls 
-          style={{ width, height, maxWidth: '100%', borderRadius: '8px' }}
-        >
-          Your browser does not support the video tag.
-        </video>
-      </div>
-    )
+    defaultProps: { src: '', name: 'video.file' },
+    component: ({ src, name }) => {
+      const fileNameFromUrl = (() => {
+        try {
+          const lastSlash = src.lastIndexOf('/');
+          const fileName = lastSlash >= 0 ? src.substring(lastSlash + 1) : src;
+          return fileName || name || 'video.file';
+        } catch {
+          return name || 'video.file';
+        }
+      })();
+      const ext = (fileNameFromUrl.split('.').pop() || '').toLowerCase();
+      const displayExt = ext ? ext : 'file';
+      
+      return (
+        <div style={{ 
+          margin: '20px 0', 
+          padding: '16px', 
+          border: '1px solid #e5e7eb', 
+          borderRadius: '8px', 
+          backgroundColor: '#f9fafb',
+          maxWidth: '400px'
+        }}>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'space-between', 
+            gap: '12px' 
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ 
+                width: '36px', 
+                height: '36px', 
+                borderRadius: '8px', 
+                backgroundColor: '#e5e7eb', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                fontWeight: 'bold', 
+                color: '#374151', 
+                fontFamily: 'Arial, Helvetica, sans-serif', 
+                textTransform: 'uppercase',
+                fontSize: '12px'
+              }}>
+                {displayExt.substring(0, 3)}
+              </div>
+              <div>
+                <div style={{ 
+                  fontWeight: '600', 
+                  color: '#111827', 
+                  fontFamily: 'Arial, Helvetica, sans-serif', 
+                  fontSize: '14px' 
+                }}>
+                  {fileNameFromUrl}
+                </div>
+                <div style={{ 
+                  color: '#6b7280', 
+                  fontSize: '12px', 
+                  fontFamily: 'Arial, Helvetica, sans-serif' 
+                }}>
+                  Video attachment
+                </div>
+              </div>
+            </div>
+            <a 
+              href={src || '#'} 
+              download 
+              style={{ 
+                backgroundColor: '#111827', 
+                color: '#ffffff', 
+                textDecoration: 'none', 
+                padding: '8px 12px', 
+                borderRadius: '6px', 
+                fontSize: '13px', 
+                fontFamily: 'Arial, Helvetica, sans-serif' 
+              }}
+            >
+              Download
+            </a>
+          </div>
+        </div>
+      );
+    }
   },
 
   // List Components
@@ -702,6 +773,236 @@ const PropertiesPanel = React.memo(({ selectedComponent, onUpdate, onDelete }) =
 
   const [localValues, setLocalValues] = React.useState({});
   
+  // File upload refs
+  const hiddenImageInputRef = React.useRef(null);
+  const hiddenVideoInputRef = React.useRef(null);
+  const hiddenPosterInputRef = React.useRef(null);
+  
+  // Upload media function
+  const uploadMedia = async (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    
+    try {
+      console.log("Starting upload for file:", file.name, "Size:", file.size, "Type:", file.type);
+      
+      const response = await fetch("http://localhost:5000/api/media/upload", {
+        method: "POST",
+        body: formData
+      });
+      
+      console.log("Upload response status:", response.status);
+      console.log("Upload response headers:", response.headers);
+      
+      // Check if response is JSON
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await response.text();
+        console.error("Non-JSON response received:", text);
+        throw new Error(`Server returned HTML instead of JSON. Status: ${response.status}. Response: ${text.substring(0, 200)}...`);
+      }
+      
+      const data = await response.json();
+      console.log("Upload response data:", data);
+      
+      if (!data.success) {
+        throw new Error(data.message || "Upload failed");
+      }
+      
+      console.log("Media uploaded successfully:", data);
+      return data.url; // Return the public URL
+    } catch (error) {
+      console.error("Upload error:", error);
+      throw error;
+    }
+  };
+  
+  // Convert Google Drive link to direct image URL
+  const convertDriveLink = (driveUrl) => {
+    try {
+      // Extract file ID from Google Drive URL
+      const fileIdMatch = driveUrl.match(/\/file\/d\/([a-zA-Z0-9-_]+)/);
+      if (fileIdMatch) {
+        const fileId = fileIdMatch[1];
+        // Convert to direct image URL
+        return `https://drive.google.com/uc?export=view&id=${fileId}`;
+      }
+      return driveUrl; // Return original if not a Google Drive link
+    } catch (error) {
+      console.error("Error converting Drive link:", error);
+      return driveUrl;
+    }
+  };
+
+  // Render upload controls for Image and Video components
+  const renderUploadControls = (type) => {
+    if (type === "image") {
+      return (
+        <div className="mt-3 space-y-3">
+          <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+            <h4 className="text-sm font-medium text-blue-800 mb-2">Upload Image</h4>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition"
+                onClick={() => hiddenImageInputRef.current?.click()}
+              >
+                📁 Choose File
+              </button>
+              <span className="text-xs text-blue-600">or paste URL above</span>
+            </div>
+            <input
+              ref={hiddenImageInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                
+                try {
+                  console.log("Uploading image:", file.name);
+                  const url = await uploadMedia(file);
+                  handlePropertyChange("src", url);
+                  console.log("Image uploaded successfully:", url);
+                } catch (err) {
+                  console.error("Image upload failed:", err);
+                  alert(`Image upload failed: ${err.message}`);
+                } finally {
+                  e.target.value = "";
+                }
+              }}
+            />
+          </div>
+          
+          <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+            <h4 className="text-sm font-medium text-green-800 mb-2">Google Drive Link</h4>
+            <div className="space-y-2">
+              <input
+                type="text"
+                placeholder="Paste Google Drive share link here..."
+                className="w-full px-3 py-2 text-sm border border-green-300 rounded focus:ring-2 focus:ring-green-500"
+                onBlur={(e) => {
+                  const driveUrl = e.target.value.trim();
+                  if (driveUrl && driveUrl.includes('drive.google.com')) {
+                    const directUrl = convertDriveLink(driveUrl);
+                    handlePropertyChange("src", directUrl);
+                    console.log("Drive link converted:", directUrl);
+                  }
+                }}
+              />
+              <p className="text-xs text-green-600">
+                💡 Make sure your Google Drive file is set to "Anyone with the link can view"
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (type === "video") {
+      return (
+        <div className="mt-3 space-y-3">
+          <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+            <h4 className="text-sm font-medium text-blue-800 mb-2">Upload Video</h4>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition"
+                onClick={() => hiddenVideoInputRef.current?.click()}
+              >
+                🎥 Choose Video
+              </button>
+              <span className="text-xs text-blue-600">or paste URL above</span>
+            </div>
+            <input
+              ref={hiddenVideoInputRef}
+              type="file"
+              accept="video/*"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                
+                try {
+                  console.log("Uploading video:", file.name);
+                  const url = await uploadMedia(file);
+                  handlePropertyChange("src", url);
+                  console.log("Video uploaded successfully:", url);
+                } catch (err) {
+                  console.error("Video upload failed:", err);
+                  alert(`Video upload failed: ${err.message}`);
+                } finally {
+                  e.target.value = "";
+                }
+              }}
+            />
+          </div>
+          
+          <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+            <h4 className="text-sm font-medium text-green-800 mb-2">Google Drive Video Link</h4>
+            <div className="space-y-2">
+              <input
+                type="text"
+                placeholder="Paste Google Drive video share link here..."
+                className="w-full px-3 py-2 text-sm border border-green-300 rounded focus:ring-2 focus:ring-green-500"
+                onBlur={(e) => {
+                  const driveUrl = e.target.value.trim();
+                  if (driveUrl && driveUrl.includes('drive.google.com')) {
+                    const directUrl = convertDriveLink(driveUrl);
+                    handlePropertyChange("src", directUrl);
+                    console.log("Drive video link converted:", directUrl);
+                  }
+                }}
+              />
+              <p className="text-xs text-green-600">
+                💡 Make sure your Google Drive video is set to "Anyone with the link can view"
+              </p>
+            </div>
+          </div>
+          
+          <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <h4 className="text-sm font-medium text-gray-700 mb-2">Upload Poster (Thumbnail)</h4>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="px-3 py-1.5 bg-gray-600 text-white text-sm rounded hover:bg-gray-700 transition"
+                onClick={() => hiddenPosterInputRef.current?.click()}
+              >
+                🖼️ Choose Poster
+              </button>
+              <span className="text-xs text-gray-600">or paste URL above</span>
+            </div>
+            <input
+              ref={hiddenPosterInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                
+                try {
+                  console.log("Uploading poster:", file.name);
+                  const url = await uploadMedia(file);
+                  handlePropertyChange("poster", url);
+                  console.log("Poster uploaded successfully:", url);
+                } catch (err) {
+                  console.error("Poster upload failed:", err);
+                  alert(`Poster upload failed: ${err.message}`);
+                } finally {
+                  e.target.value = "";
+                }
+              }}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    return null;
+  };
+  
   // Sync local values when selectedComponent changes
   React.useEffect(() => {
     if (selectedComponent) {
@@ -870,6 +1171,9 @@ const PropertiesPanel = React.memo(({ selectedComponent, onUpdate, onDelete }) =
           );
         })}
       </div>
+      
+      {/* Upload controls for Image and Video components */}
+      {renderUploadControls(selectedComponent.type)}
     </div>
   );
 });
@@ -909,195 +1213,6 @@ const VisualEditor = ({ initialContent = '', onSave, onClose, isFullscreen = fal
     console.log('Selected component changed:', selectedComponent);
   }, [selectedComponent]);
 
-  const generateHTML = (comps) => {
-    if (comps.length === 0) return '';
-    
-    // Generate email-compatible HTML with inline styles
-    
-    const renderComponent = (comp) => {
-      const componentDef = COMPONENT_LIBRARY.find(c => c.id === comp.type);
-      if (!componentDef) return '';
-      
-      // Create a simple HTML representation based on component type
-      const { type, props } = comp;
-      
-      switch (type) {
-        case 'heading':
-          const level = props.level || 2;
-          return `<h${level} style="text-align: ${props.align || 'left'}; color: ${props.color || '#333'}; margin: 10px 0;">${props.text || ''}</h${level}>`;
-        
-        case 'paragraph':
-          return `<p style="text-align: ${props.align || 'left'}; color: ${props.color || '#333'}; margin: 10px 0; line-height: 1.6;">${props.text || ''}</p>`;
-        
-        case 'quote':
-          return `<blockquote style="border-left: 4px solid #007cba; padding: 10px 20px; margin: 20px 0; font-style: italic; color: ${props.color || '#666'}; background-color: #f8f9fa;">
-            "${props.text || ''}"
-            <footer style="margin-top: 10px; font-size: 0.9em; color: #888;">— ${props.author || ''}</footer>
-          </blockquote>`;
-        
-        case 'container':
-          const children = comp.children ? comp.children.map(child => renderComponent(child)).join('') : '';
-          return `<div style="padding: ${props.padding || '20px'}; background-color: ${props.backgroundColor || '#ffffff'}; border-radius: ${props.borderRadius || '8px'}; margin: 10px 0;">
-            ${children}
-          </div>`;
-        
-        case 'row':
-          const rowChildren = comp.children ? comp.children.map(child => renderComponent(child)).join('') : '';
-          return `<div style="display: flex; gap: ${props.gap || '20px'}; flex-direction: ${props.direction || 'row'}; align-items: ${props.align || 'flex-start'}; margin: 10px 0;">
-            ${rowChildren}
-          </div>`;
-        
-        case 'column':
-          const columnChildren = comp.children ? comp.children.map(child => renderComponent(child)).join('') : '';
-          return `<div style="width: ${props.width || '50%'}; padding: ${props.padding || '10px'}; margin: 5px 0;">
-            ${columnChildren}
-          </div>`;
-        
-        case 'button':
-          const buttonStyle = props.style === 'primary' ? 'background-color: #007cba; color: white;' :
-                            props.style === 'secondary' ? 'background-color: #6c757d; color: white;' :
-                            'background-color: transparent; color: #007cba; border: 2px solid #007cba;';
-          return `<a href="${props.url || '#'}" style="${buttonStyle} padding: ${props.padding || '12px 24px'}; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; text-decoration: none; display: inline-block; margin: 10px 0;">
-            ${props.text || 'Click Me'}
-          </a>`;
-        
-        case 'cta-button':
-          return `<div style="text-align: center; margin: 20px 0;">
-            <a href="${props.url || '#'}" style="background-color: ${props.backgroundColor || '#28a745'}; color: ${props.color || 'white'}; padding: 15px 30px; border-radius: 25px; text-decoration: none; font-size: 18px; font-weight: bold; display: inline-block; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
-              ${props.text || 'Get Started Now'}
-            </a>
-          </div>`;
-        
-        case 'image':
-          return `<div style="text-align: ${props.align || 'center'}; margin: 20px 0;">
-            <img src="${props.src || 'https://via.placeholder.com/400x300'}" alt="${props.alt || 'Image'}" style="width: ${props.width || '100%'}; height: ${props.height || 'auto'}; max-width: 100%; border-radius: 8px;" />
-          </div>`;
-        
-        case 'video':
-          return `<div style="margin: 20px 0;">
-            <video src="${props.src || ''}" poster="${props.poster || 'https://via.placeholder.com/400x300'}" controls style="width: ${props.width || '100%'}; height: ${props.height || '300px'}; max-width: 100%; border-radius: 8px;">
-              Your browser does not support the video tag.
-            </video>
-          </div>`;
-        
-        case 'bullet-list':
-          const bulletItems = Array.isArray(props.items) ? props.items.map(item => `<li style="margin: 5px 0;">${item}</li>`).join('') : '';
-          return `<ul style="color: ${props.color || '#333'}; margin: 10px 0; padding-left: 20px;">
-            ${bulletItems}
-          </ul>`;
-        
-        case 'numbered-list':
-          const numberedItems = Array.isArray(props.items) ? props.items.map(item => `<li style="margin: 5px 0;">${item}</li>`).join('') : '';
-          return `<ol style="color: ${props.color || '#333'}; margin: 10px 0; padding-left: 20px;">
-            ${numberedItems}
-          </ol>`;
-        
-        case 'divider':
-          return `<hr style="border: none; border-top: ${props.thickness || '1px'} ${props.style || 'solid'} ${props.color || '#ddd'}; margin: ${props.margin || '20px 0'};" />`;
-        
-        case 'spacer':
-          return `<div style="height: ${props.height || '20px'}; width: 100%;"></div>`;
-        
-        case 'card':
-          const cardChildren = comp.children ? comp.children.map(child => renderComponent(child)).join('') : '';
-          return `<div style="background-color: ${props.backgroundColor || '#ffffff'}; border: 1px solid ${props.borderColor || '#ddd'}; border-radius: 8px; padding: 20px; margin: 10px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-            ${props.title ? `<h3 style="margin: 0 0 10px 0; color: #333;">${props.title}</h3>` : ''}
-            ${props.content ? `<p style="margin: 0 0 10px 0; color: #666;">${props.content}</p>` : ''}
-            ${cardChildren}
-          </div>`;
-        
-        case 'social-links':
-          const socialItems = Array.isArray(props.links) ? props.links.map(link => 
-            `<a href="${link.url || '#'}" style="display: inline-block; margin: 0 10px; padding: 10px; background-color: #f8f9fa; border-radius: 50%; text-decoration: none; font-size: 20px;">${link.icon || '🔗'}</a>`
-          ).join('') : '';
-          return `<div style="text-align: ${props.align || 'center'}; margin: 20px 0;">
-            ${socialItems}
-          </div>`;
-        
-        case 'contact-form':
-          const formFields = Array.isArray(props.fields) ? props.fields.map(field => {
-            if (field === 'Message') {
-              return `<div style="margin: 10px 0;">
-                <label style="display: block; margin-bottom: 5px; font-weight: bold;">${field}:</label>
-                <textarea style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; min-height: 100px;" placeholder="Enter your ${field.toLowerCase()}"></textarea>
-              </div>`;
-            } else {
-              return `<div style="margin: 10px 0;">
-                <label style="display: block; margin-bottom: 5px; font-weight: bold;">${field}:</label>
-                <input type="${field === 'Email' ? 'email' : 'text'}" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;" placeholder="Enter your ${field.toLowerCase()}" />
-              </div>`;
-            }
-          }).join('') : '';
-          return `<div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            ${props.title ? `<h3 style="margin: 0 0 15px 0;">${props.title}</h3>` : ''}
-            <form>
-              ${formFields}
-              <button type="submit" style="background-color: #007cba; color: white; padding: 12px 24px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px;">${props.buttonText || 'Send Message'}</button>
-            </form>
-          </div>`;
-        
-        case 'table':
-          const tableHeaders = Array.isArray(props.headers) ? props.headers.map(header => 
-            `<th style="padding: 12px; text-align: left; border: 1px solid #ddd; font-weight: bold;">${header}</th>`
-          ).join('') : '';
-          const tableRows = Array.isArray(props.rows) ? props.rows.map((row, rowIndex) => {
-            const cells = Array.isArray(row) ? row.map(cell => 
-              `<td style="padding: 12px; border: 1px solid #ddd;">${cell}</td>`
-            ).join('') : '';
-            const rowStyle = props.striped && rowIndex % 2 === 0 ? 'background-color: #f8f9fa;' : '';
-            return `<tr style="${rowStyle}">${cells}</tr>`;
-          }).join('') : '';
-          return `<div style="margin: 20px 0; overflow-x: auto;">
-            <table style="width: 100%; border-collapse: collapse; border: 1px solid #ddd;">
-              <thead>
-                <tr style="background-color: #f8f9fa;">
-                  ${tableHeaders}
-                </tr>
-              </thead>
-              <tbody>
-                ${tableRows}
-              </tbody>
-            </table>
-          </div>`;
-        
-        case 'progress-bar':
-          return `<div style="margin: 20px 0;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-              <span style="font-weight: bold;">${props.label || 'Progress'}</span>
-              <span>${props.percentage || 0}%</span>
-            </div>
-            <div style="width: 100%; height: 20px; background-color: ${props.backgroundColor || '#e9ecef'}; border-radius: 10px; overflow: hidden;">
-              <div style="width: ${props.percentage || 0}%; height: 100%; background-color: ${props.color || '#007cba'}; transition: width 0.3s ease;"></div>
-            </div>
-          </div>`;
-        
-        case 'alert':
-          const alertColors = {
-            info: { bg: '#d1ecf1', border: '#bee5eb', text: '#0c5460' },
-            success: { bg: '#d4edda', border: '#c3e6cb', text: '#155724' },
-            warning: { bg: '#fff3cd', border: '#ffeaa7', text: '#856404' },
-            danger: { bg: '#f8d7da', border: '#f5c6cb', text: '#721c24' }
-          };
-          const alertStyle = alertColors[props.type] || alertColors.info;
-          return `<div style="background-color: ${alertStyle.bg}; border: 1px solid ${alertStyle.border}; color: ${alertStyle.text}; padding: 15px; border-radius: 4px; margin: 20px 0; position: relative;">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-              <div>
-                ${props.title ? `<h4 style="margin: 0 0 5px 0; font-size: 16px;">${props.title}</h4>` : ''}
-                <p style="margin: 0; font-size: 14px;">${props.message || ''}</p>
-              </div>
-              ${props.dismissible ? `<button style="background: none; border: none; font-size: 18px; cursor: pointer; color: ${alertStyle.text}; padding: 0; margin-left: 10px;">×</button>` : ''}
-            </div>
-          </div>`;
-        
-        default:
-          return `<div style="margin: 10px 0; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
-            <p>Unknown component: ${type}</p>
-          </div>`;
-      }
-    };
-
-    return comps.map(comp => renderComponent(comp)).join('');
-  };
 
   const handleDrop = useCallback((item) => {
     console.log('Drop received:', item);

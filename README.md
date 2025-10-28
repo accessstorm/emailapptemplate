@@ -29,6 +29,22 @@ A modern, full-stack email client built with React and Node.js, designed specifi
 - **Meeting Invitation** - Professional meeting scheduling
 - **Project Completion** - Project delivery celebrations
 - **Custom Templates** - Create your own HTML templates
+- **Visual Editor** - Drag-and-drop email builder with 20+ components
+- **Your Templates** - Save and reuse custom templates
+
+### 📋 Form Submission System (NEW!)
+- **Embedded Forms** - Add contact forms directly in emails
+- **Response Collection** - Recipients can submit forms from emails
+- **Response Viewer** - View and manage all form submissions
+- **Data Tracking** - IP address, timestamp, and user agent tracking
+- **Secure Storage** - All responses stored in MongoDB
+- **No Login Required** - Recipients submit without authentication
+
+### 🖼️ Email-Compatible Media
+- **Image Support** - Properly formatted images for all email clients
+- **Video Posters** - Clickable video thumbnails with play buttons
+- **Responsive Media** - Auto-scaling for mobile devices
+- **Public URL Support** - Works with any image hosting service
 
 ### 🎨 Modern UI/UX
 - **Responsive Design** - Works on desktop, tablet, and mobile
@@ -53,15 +69,15 @@ A modern, full-stack email client built with React and Node.js, designed specifi
    ```
 
 2. **Install dependencies**
-   ```bash
+```bash
    # Backend
-   cd backend
+cd backend
    npm install
    
    # Frontend
    cd ../frontend
-   npm install
-   ```
+npm install
+```
 
 3. **Environment Setup**
    ```bash
@@ -79,15 +95,15 @@ A modern, full-stack email client built with React and Node.js, designed specifi
    ```
 
 5. **Start the application**
-   ```bash
+```bash
    # Terminal 1 - Backend
    cd backend
    npm start
    
    # Terminal 2 - Frontend
    cd frontend
-   npm start
-   ```
+npm start
+```
 
 6. **Access the application**
    - Frontend: http://localhost:3000
@@ -261,6 +277,25 @@ email-system/
 
 ### File Management
 - `GET /api/attachments/:emailId/:index` - Download attachment
+
+### Form Submissions (NEW!)
+- `POST /api/form-submission` - Handle form submission from email
+- `GET /api/form-submissions` - Get all form submissions
+- `GET /api/form-submissions?formId=xyz` - Get submissions for specific form
+
+## 📚 Documentation
+
+This project includes comprehensive documentation:
+
+- **[EMAIL_TEMPLATES_AND_FORMS_GUIDE.md](./EMAIL_TEMPLATES_AND_FORMS_GUIDE.md)** - Complete guide to email templates and form submission features
+- **[IMAGE_HOSTING_GUIDE.md](./IMAGE_HOSTING_GUIDE.md)** - Step-by-step guide for hosting images for emails
+- **[FIXES_SUMMARY.md](./FIXES_SUMMARY.md)** - Technical summary of recent fixes and improvements
+- **[OPTIMIZATION_SUMMARY.md](./OPTIMIZATION_SUMMARY.md)** - Performance optimization details
+
+### Quick Links
+- 🖼️ Need to add images to emails? See [IMAGE_HOSTING_GUIDE.md](./IMAGE_HOSTING_GUIDE.md)
+- 📋 Want to add forms to emails? See [EMAIL_TEMPLATES_AND_FORMS_GUIDE.md](./EMAIL_TEMPLATES_AND_FORMS_GUIDE.md)
+- 🐛 Troubleshooting? Check the guides above
 
 ## 🤝 Contributing
 

@@ -6,6 +6,7 @@ import EmailDetail from "./components/EmailDetail";
 import TemplateModal from "./components/TemplateModal";
 import AddClientModal from "./components/AddClientModal";
 import ErrorBoundary from "./components/ErrorBoundary";
+import FormResponses from "./components/FormResponses";
 
 function App() {
   const [currentView, setCurrentView] = useState("mailbox");
@@ -310,6 +311,12 @@ function App() {
               onLabelsUpdated={refreshSentEmails}
               selectedLabel={selectedLabel}
             />
+            </ErrorBoundary>
+          )}
+          
+          {currentView === "form-responses" && (
+            <ErrorBoundary title="Form Responses Error" message="There was an error loading form responses.">
+              <FormResponses />
             </ErrorBoundary>
           )}
           

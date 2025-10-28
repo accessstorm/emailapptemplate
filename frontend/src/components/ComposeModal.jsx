@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { validateEmailForm } from "../utils/validation";
 import { useDebouncedCallback } from "../hooks/useDebounce";
+import { regenerateTemplateHTML } from "../utils/visualEditorUtils";
 import TemplateModal from "./TemplateModal";
 
 export default function ComposeModal({ onClose, onEmailSent, selectedClient, onClientCleared, currentDraft, onDraftCleared, onSaveDraft, onUpdateDraft }) {
@@ -320,6 +321,24 @@ export default function ComposeModal({ onClose, onEmailSent, selectedClient, onC
     // Replace template variables with placeholder text
     let processedSubject = template.subject;
     let processedHtml = template.html;
+    
+    // Check if this is a Visual Editor template that needs HTML regeneration
+    if (template.isUserTemplate && template.content) {
+      console.log('Visual Editor template detected - regenerating HTML for proper image display');
+      try {
+        // Regenerate HTML from component data to ensure proper email structure
+        const regeneratedHTML = regenerateTemplateHTML(template);
+        if (regeneratedHTML) {
+          processedHtml = regeneratedHTML;
+          console.log('Successfully regenerated HTML for Visual Editor template');
+        } else {
+          console.warn('Failed to regenerate HTML, using saved HTML');
+        }
+      } catch (error) {
+        console.error('Error regenerating Visual Editor template HTML:', error);
+        console.log('Falling back to saved HTML');
+      }
+    }
     
     // Replace common variables with placeholder text
     const variableReplacements = {
